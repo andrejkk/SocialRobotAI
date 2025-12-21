@@ -4,10 +4,10 @@
 
 Usage:
 
-1. Create .env file in root with the following structure:
+1. Create .env file in root with the following structure:<br>
    `VITE_SUPABASE_PROJECT_ID`=""<br>
    `VITE_SUPABASE_PUBLISHABLE_KEY`=""<br>
-   `VITE_SUPABASE_URL`=""
+   `VITE_SUPABASE_URL`=""<br>
 
 2. Install libraries, using pip or a virtual environment
 
