@@ -1,0 +1,9 @@
+# Requirements for signal-fetcher.py
+# Install with: pip install -r requirements.txt
+
+pandas
+matplotlib
+python-dotenv
+supabase
+numpy
+httpx
