@@ -1,3 +1,5 @@
+#%% Imports
+import numpy as np
 import os
 import json
 import pandas as pd
@@ -6,6 +8,7 @@ import argparse
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
+data_path = 'Data/'
 load_dotenv()
 
 SUPABASE_URL = os.getenv("VITE_SUPABASE_URL")
