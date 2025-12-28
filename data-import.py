@@ -22,6 +22,15 @@ SENSOR_TYPE_IDS = {
     "relative_orientation": 'c850391c-5cf3-4b3f-9fac-26438f5a9353'
 }
 
+def fetch_events(recording_id):
+    query = (
+        supabase.table("events")
+        .select("recording_id,event_code_id,timestamp,offset_ms,created_at,event_codes(e_id,e_description_butt)")
+        .eq("recording_id", recording_id)
+    )
+    response = query.execute()
+    return response.data
+
 def fetch_accelerometer_data(recording_id):
     query = (
         supabase.table("sensor_data")
@@ -148,6 +157,7 @@ if __name__ == "__main__":
     date = args.date
     sID = args.sID
 
+    # Fetch sensor data
     accel_data = fetch_accelerometer_data(args.recording_id)
     gyro_data = fetch_gyroscope_data(args.recording_id)
     linear_data = fetch_linear_acceleration_data(args.recording_id)
@@ -178,3 +188,8 @@ if __name__ == "__main__":
         f"./Data/{uID}/{date}/{sID}/plots/relative_orientation_signal_plot.png"
     )
     relative_orientation_df.to_csv(f"./Data/{uID}/{date}/{sID}/sensor-data/relative_orientation_signal_data.csv", index=False)
+
+    # Fetch and save events
+    events = fetch_events(args.recording_id)
+    events_df = pd.DataFrame(events)
+    events_df.to_csv(f"./Data/{uID}/{date}/{sID}/events.csv", index=False)
