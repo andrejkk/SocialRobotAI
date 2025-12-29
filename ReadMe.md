@@ -45,3 +45,10 @@ Usage:
 Example command: `python3 ./data-import.py 0565b6af-c324-47da-b684-458970d6e48c 66001 2025-12-11 S2`
 
 This is required so the script knows where to save the generated files (plots)
+
+## Video (.webm) to .wav
+
+To convert video to audio format (for example .wav) for signal analysis:
+
+1. Move to directory containing the video
+2. Run `ffmpeg -i ./16ef52e7-8ae6-474c-8911-a6aec7bafe58.webm  output.wav` - replace parameters with your file names
