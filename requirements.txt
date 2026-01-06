@@ -8,3 +8,4 @@ supabase
 numpy
 httpx
 moviepy
+scikit-learn

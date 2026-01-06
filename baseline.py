@@ -1,6 +1,18 @@
+# %% [markdown]
+# ## Imports
+
+# %% 
 from datetime import datetime
 import pandas as pd
 import re
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+
+# %% [markdown]
+# ## Helper functions
+
+# %%
 
 """
 Helper function to parse annotation strings
@@ -48,95 +60,260 @@ def assign_window_label(window_start, window_end, activity_df):
 
     return max(overlaps, key=lambda x: x[1])[0]
 
+def get_events_in_window(sensor_df, start, end):
+    return sensor_df[
+        (sensor_df["timestamp"] >= start) &
+        (sensor_df["timestamp"] < end)
+    ]
 
-if __name__ == "__main__":
-    print('start')
-    CSV_PATH = './hh101.csv'
+def event_count_features(window_events):
+    return {
+        "total_events": len(window_events),
+        "on_events": (window_events["state"] == "ON").sum(),
+        "off_events": (window_events["state"] == "OFF").sum()
+    }
 
-    # Step 1: Read data from csv
-    df = pd.read_csv(
-        CSV_PATH,
-        sep=",",
-        header=None,
-        names=["date", "time", "location", "state", "annotation"],
-        engine="python",
-        nrows=7500 # Adjust if needed, 7500 for testing (performance)
+def room_features(window_events):
+    room_counts = window_events["location"].value_counts()
+
+    features = {}
+    for room, count in room_counts.items():
+        features[f"room_{room}_count"] = count
+
+    # Dominant room
+    features["dominant_room"] = (
+        room_counts.idxmax() if not room_counts.empty else "None"
     )
 
-    # Parse timestamps into a single datetime
-    df["timestamp"] = pd.to_datetime(
-        df["date"] + " " + df["time"],
-        format="%Y-%m-%d %H:%M:%S.%f"
+    return features
+
+def sensor_diversity_features(window_events):
+    return {
+        "unique_locations": window_events["location"].nunique()
+    }
+
+def temporal_features(window_start):
+    hour = window_start.hour
+
+    return {
+        "hour": hour,
+        "is_morning": int(6 <= hour < 12),
+        "is_afternoon": int(12 <= hour < 18),
+        "is_evening": int(18 <= hour < 23),
+        "is_night": int(hour >= 23 or hour < 6)
+    }
+
+def extract_window_features(sensor_df, window_start, window_end):
+    window_events = get_events_in_window(sensor_df, window_start, window_end)
+
+    features = {}
+    features.update(event_count_features(window_events))
+    features.update(room_features(window_events))
+    features.update(sensor_diversity_features(window_events))
+    features.update(temporal_features(window_start))
+
+    return features
+
+def get_dominant_room(row):
+    room_cols = [c for c in row.index if c.startswith("room_")]
+    if row[room_cols].sum() == 0:
+        return None
+    return row[room_cols].idxmax().replace("room_", "").replace("_count", "")
+
+
+def rule_based_predict(row):
+    dominant_room = get_dominant_room(row)
+    hour = row.get("hour", None)  # if you included hour earlier
+
+    # No sensor activity
+    if row["total_events"] == 0:
+        return "Other"
+
+    # Bathroom activities
+    if dominant_room == "Bathroom":
+        if row["total_events"] < 5:
+            return "Toilet"
+        else:
+            return "Personal_Hygiene"
+
+    # Bedroom activities
+    if dominant_room == "Bedroom":
+        if hour is not None and (22 <= hour or hour < 6):
+            return "Sleep"
+        return "Sleep_Out_Of_Bed"
+
+    # Kitchen / Dining
+    if dominant_room in ["Kitchen", "DiningRoom"]:
+        if hour is not None and hour < 11:
+            return "Eat_Breakfast"
+        elif hour is not None and 11 <= hour < 15:
+            return "Eat_Lunch"
+        return "Other"
+
+    # Living / TV area
+    if dominant_room in ["LivingRoom", "LivingRoomArea"]:
+        return "Watch_TV"
+
+    # Default fallback
+    return "Other"
+
+
+# %% [markdown]
+# ## Import data
+
+# %% 
+CSV_PATH = './hh101.csv'
+
+# Step 1: Read data from csv
+df = pd.read_csv(
+    CSV_PATH,
+    sep=",",
+    header=None,
+    names=["date", "time", "location", "state", "annotation"],
+    engine="python",
+    nrows=7500 # Adjust if needed, 7500 for testing (performance)
+)
+
+# Parse timestamps into a single datetime
+df["timestamp"] = pd.to_datetime(
+    df["date"] + " " + df["time"],
+    format="%Y-%m-%d %H:%M:%S.%f"
+)
+
+# Order by timestamp to have a strictly ordered time series
+df = df.sort_values("timestamp").reset_index(drop=True)
+
+# %% [markdown]
+# ## Step 4 - Extract activity intervals
+
+# %% 
+
+# df[df["annotation"].notna()].head(10)
+
+active_activities = {}
+activity_intervals = []
+
+for _, row in df.iterrows():
+    activity, marker = parse_annotation(row["annotation"])
+
+    if activity is None:
+        continue
+
+    ts = row["timestamp"]
+
+    if marker == "begin":
+        active_activities[activity] = ts
+
+    elif marker == "end":
+        if activity in active_activities:
+            start_time = active_activities.pop(activity)
+            activity_intervals.append({
+                "activity": activity,
+                "start": start_time,
+                "end": ts
+            })
+
+# activity_df: Lines like: 
+# 0                Step_Out 2012-07-20 10:38:54.512364 2012-07-20 10:50:54.933393
+# 1                Toilet   2012-07-20 11:09:18.952300 2012-07-20 11:09:59.128578
+activity_df = pd.DataFrame(activity_intervals)
+# print(activity_df)
+# print(activity_df.head())
+# print(activity_df["activity"].value_counts())
+
+# %% [markdown]
+# ## Step 5
+
+# %% 
+# Step 5 and Step 6
+sensor_df = df[["timestamp", "location", "state"]].copy()
+
+WINDOW_SIZE = pd.Timedelta(seconds=60)
+
+start_time = sensor_df["timestamp"].min().floor("min")
+end_time = sensor_df["timestamp"].max().ceil("min")
+
+windows = []
+current = start_time
+
+while current < end_time:
+    windows.append((current, current + WINDOW_SIZE))
+    current += WINDOW_SIZE
+
+# Step 8
+window_data = []
+
+for w_start, w_end in windows:
+    label = assign_window_label(w_start, w_end, activity_df)
+
+    window_data.append({
+        "window_start": w_start,
+        "window_end": w_end,
+        "label": label
+    })
+
+windows_df = pd.DataFrame(window_data)
+
+# %%
+
+# Step 10
+feature_rows = []
+
+for _, row in windows_df.iterrows():
+    features = extract_window_features(
+        sensor_df,
+        row["window_start"],
+        row["window_end"]
     )
 
-    # Order by timestamp to have a strictly ordered time series
-    df = df.sort_values("timestamp").reset_index(drop=True)
+    features["label"] = row["label"]
+    features["window_start"] = row["window_start"]
+    features["window_end"] = row["window_end"]
 
-    # Inspect 
-    # df[df["annotation"].notna()].head(10)
+    feature_rows.append(features)
 
-    # Step 4 - Extract activity intervals
-    active_activities = {}
-    activity_intervals = []
+# features_df: A windowed multivariate time series representation
+features_df = pd.DataFrame(feature_rows)
+features_df = features_df.fillna(0)
 
-    for _, row in df.iterrows():
-        activity, marker = parse_annotation(row["annotation"])
+# %%
 
-        if activity is None:
-            continue
+# print(features_df.head(150))
+# print(features_df["label"].value_counts())
 
-        ts = row["timestamp"]
+# BASELINE 0: Majority Class Predictor
+# Always predict the most frequent activity label, regardless of input.
 
-        if marker == "begin":
-            active_activities[activity] = ts
+majority_label = features_df["label"].value_counts().idxmax()
 
-        elif marker == "end":
-            if activity in active_activities:
-                start_time = active_activities.pop(activity)
-                activity_intervals.append({
-                    "activity": activity,
-                    "start": start_time,
-                    "end": ts
-                })
+# For every window, predict the majority label.
+y_true = features_df["label"]
+y_pred = [majority_label] * len(y_true)
 
-    # activity_df: Lines like: 
-    # 0                Step_Out 2012-07-20 10:38:54.512364 2012-07-20 10:50:54.933393
-    # 1                  Toilet 2012-07-20 11:09:18.952300 2012-07-20 11:09:59.128578
-    activity_df = pd.DataFrame(activity_intervals)
-    # print(activity_df)
-    # print(activity_df.head())
-    # print(activity_df["activity"].value_counts())
+accuracy = accuracy_score(y_true, y_pred)
+# print(accuracy)
+# print(classification_report(y_true, y_pred))
+
+cm = confusion_matrix(y_true, y_pred, labels=y_true.unique())
+cm_df = pd.DataFrame(cm, index=y_true.unique(), columns=y_true.unique())
+
+# %%
+
+# BASELINE 1: Rule-Based Activity Recognition
+# Baseline 1 uses human knowledge instead of learning
+# If most sensor activity happens in room X at time Y, the activity is probably Z.
+# This is a classic symbolic baseline in smart-home research.
+
+y_true = features_df["label"]
+y_pred = features_df.apply(rule_based_predict, axis=1)
+
+accuracy = accuracy_score(y_true, y_pred)
+print(accuracy)
+print(classification_report(y_true, y_pred))
 
 
-    # Step 5
-    sensor_df = df[["timestamp", "location", "state"]].copy()
 
-    # Step 6
-    WINDOW_SIZE = pd.Timedelta(seconds=60)
 
-    start_time = sensor_df["timestamp"].min().floor("min")
-    end_time = sensor_df["timestamp"].max().ceil("min")
-
-    windows = []
-    current = start_time
-
-    while current < end_time:
-        windows.append((current, current + WINDOW_SIZE))
-        current += WINDOW_SIZE
-
-    # Step 8
-    window_data = []
-
-    for w_start, w_end in windows:
-        label = assign_window_label(w_start, w_end, activity_df)
-
-        window_data.append({
-            "window_start": w_start,
-            "window_end": w_end,
-            "label": label
-        })
-
-    windows_df = pd.DataFrame(window_data)
 
 
 
@@ -147,3 +324,5 @@ if __name__ == "__main__":
 
 
 
+
+# %%
