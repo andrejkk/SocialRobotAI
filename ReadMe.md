@@ -52,3 +52,45 @@ To convert video to audio format (for example .wav) for signal analysis:
 
 1. Move to directory containing the video
 2. Run `ffmpeg -i ./16ef52e7-8ae6-474c-8911-a6aec7bafe58.webm  output.wav` - replace parameters with your file names
+
+## baseline.py
+
+Pipeline:
+
+- Parse labeled activities: Read ground-truth activity files with timestamps and labels.
+
+- Align with sensor events: Map each labeled activity to the corresponding raw sensor activations.
+
+- Segment into time windows: Divide the continuous sensor stream into fixed-length windows to capture local activity.
+
+- Extract features per window: Compute statistics such as total sensor activations, room-level counts, sensor diversity, and time-of-day indicators.
+
+- Combine features with labels: Build a windowed dataset where each row represents one time window and its associated activity.
+
+- Produce structured dataset: The resulting dataset is ready for baseline algorithms or machine-learning models for activity recognition.
+
+### Baseline 0: Majority Class Predictor
+
+- Idea: Always predicts the most frequent activity label in the dataset, ignoring all sensor data.
+- Mechanism: Counts the occurrences of each activity in the dataset, identifies the majority class (e.g., "Other"), and assigns that label to every time window.
+- Purpose: Provides a lower-bound reference for performance. Any real model should perform better than this trivial baseline.
+- Pros & Cons: Extremely simple and fast; does not use any sensor information, so it fails for all minority classes.
+
+### Baseline 1: Rule-Based Predictor
+
+- Idea: Uses simple human-designed rules to infer activities based on sensor patterns, dominant room, and optionally time-of-day.
+- Mechanism:
+
+  1.  Determine the room with the highest number of sensor activations in a window (dominant room).
+  2.  Apply rules such as:
+
+      - Bathroom → Toilet or Personal Hygiene
+      - Bedroom → Sleep or Sleep_Out_Of_Bed (using hour if available)
+      - Kitchen/Dining → Eat_Breakfast / Eat_Lunch
+      - Living Room → Watch_TV
+
+  3.  Default to "Other" if no rule applies or no activity is detected.
+
+- Purpose: Provides an interpretable, non-ML benchmark that captures obvious spatial and temporal patterns.
+
+- Pros & Cons: Simple and explainable; outperforms majority-class baseline for activities with strong room/time associations, but misses rare or complex activities.

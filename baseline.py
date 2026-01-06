@@ -9,6 +9,11 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 
+
+
+
+
+
 # %% [markdown]
 # ## Helper functions
 
@@ -42,7 +47,7 @@ def parse_annotation(annotation):
 
     return None, None
 
-# Step 7
+# STEP 7: Choose the activity with maximum overlap with the window.
 def assign_window_label(window_start, window_end, activity_df):
     overlaps = []
 
@@ -60,12 +65,14 @@ def assign_window_label(window_start, window_end, activity_df):
 
     return max(overlaps, key=lambda x: x[1])[0]
 
+# Get sensor events inside a window
 def get_events_in_window(sensor_df, start, end):
     return sensor_df[
         (sensor_df["timestamp"] >= start) &
         (sensor_df["timestamp"] < end)
     ]
 
+# Event-count features
 def event_count_features(window_events):
     return {
         "total_events": len(window_events),
@@ -73,6 +80,7 @@ def event_count_features(window_events):
         "off_events": (window_events["state"] == "OFF").sum()
     }
 
+# Normalize locations into rooms (simple baseline)
 def room_features(window_events):
     room_counts = window_events["location"].value_counts()
 
@@ -103,6 +111,7 @@ def temporal_features(window_start):
         "is_night": int(hour >= 23 or hour < 6)
     }
 
+# Combine all features for one window
 def extract_window_features(sensor_df, window_start, window_end):
     window_events = get_events_in_window(sensor_df, window_start, window_end)
 
@@ -158,13 +167,20 @@ def rule_based_predict(row):
     return "Other"
 
 
+
+
+
+
+
 # %% [markdown]
 # ## Import data
 
 # %% 
 CSV_PATH = './hh101.csv'
 
-# Step 1: Read data from csv
+# STEP 1: Read data from csv
+# Row with annotation:    2012-07-20	10:38:54.512364	OutsideDoor	    ON	Step_Out="begin"
+# Row without annotation: 2012-07-20	10:39:00.123456	KitchenLight	ON	NaN
 df = pd.read_csv(
     CSV_PATH,
     sep=",",
@@ -174,6 +190,7 @@ df = pd.read_csv(
     nrows=7500 # Adjust if needed, 7500 for testing (performance)
 )
 
+# STEP 2: Parse timestamps into a single datetime
 # Parse timestamps into a single datetime
 df["timestamp"] = pd.to_datetime(
     df["date"] + " " + df["time"],
@@ -181,15 +198,29 @@ df["timestamp"] = pd.to_datetime(
 )
 
 # Order by timestamp to have a strictly ordered time series
+# Row with annotation:   0     2012-07-20  10:38:54.512364  OutsideDoor    ON  Step_Out="begin" 2012-07-20 10:38:54.512364 
+# Row without annotation 1     2012-07-20  10:38:59.541365  OutsideDoor    OFF None             2012-07-20 10:38:59.541365
 df = df.sort_values("timestamp").reset_index(drop=True)
 
-# %% [markdown]
-# ## Step 4 - Extract activity intervals
+
+
+
+
 
 # %% 
-
+# STEP 3: Inspect annotations (sanity check)
 # df[df["annotation"].notna()].head(10)
 
+
+
+
+
+
+# %% 
+# STEP 4 - Parse activity begin/end markers
+# df[df["annotation"].notna()].head(10)
+
+# Extract activity intervals
 active_activities = {}
 activity_intervals = []
 
@@ -214,18 +245,25 @@ for _, row in df.iterrows():
             })
 
 # activity_df: Lines like: 
-# 0                Step_Out 2012-07-20 10:38:54.512364 2012-07-20 10:50:54.933393
-# 1                Toilet   2012-07-20 11:09:18.952300 2012-07-20 11:09:59.128578
+#    Activity Start                      End
+# 0  Step_Out 2012-07-20 10:38:54.512364 2012-07-20 10:50:54.933393
+# 1  Toilet   2012-07-20 11:09:18.952300 2012-07-20 11:09:59.128578
+
+# Convert intervals to DataFrame
 activity_df = pd.DataFrame(activity_intervals)
 # print(activity_df)
 # print(activity_df.head())
 # print(activity_df["activity"].value_counts())
 
-# %% [markdown]
-# ## Step 5
+
+
+
+
+
+
 
 # %% 
-# Step 5 and Step 6
+# STEP 5 and STEP 6: Extract sensor events
 sensor_df = df[["timestamp", "location", "state"]].copy()
 
 WINDOW_SIZE = pd.Timedelta(seconds=60)
@@ -240,7 +278,16 @@ while current < end_time:
     windows.append((current, current + WINDOW_SIZE))
     current += WINDOW_SIZE
 
-# Step 8
+# windows:
+# [(Timestamp('2012-07-20 10:38:00'), Timestamp('2012-07-20 10:39:00')),
+#  (Timestamp('2012-07-20 10:39:00'), Timestamp('2012-07-20 10:40:00')),
+#  (Timestamp('2012-07-20 10:40:00'), Timestamp('2012-07-20 10:41:00'))
+
+
+
+
+# %%
+# STEP 8: Build windowed dataset (labels only for now)
 window_data = []
 
 for w_start, w_end in windows:
@@ -253,10 +300,39 @@ for w_start, w_end in windows:
     })
 
 windows_df = pd.DataFrame(window_data)
+# windows_df:
+#   window_start        window_end          label  
+# 0	2012-07-20 10:38:00	2012-07-20 10:39:00	Step_Out
+# 1	2012-07-20 10:39:00	2012-07-20 10:40:00	Step_Out
+
+
+
+
+# STEP 9: Sanity check
+# At this point, you have:
+# ✔ Parsed CASAS correctly
+# ✔ Extracted activity intervals
+# ✔ Built a windowed ground-truth timeline
+
+
+
+
+
+
 
 # %%
 
-# Step 10
+# STEP 10: Feature Extraction per Time Window
+
+# 10.1 Decide which features we extract (baseline-safe)
+# We’ll implement exactly what we discussed:
+# - Feature groups
+# - Event counts
+# - Room-level activity
+# - Sensor diversity
+# - Temporal context
+
+# Build the full feature dataset
 feature_rows = []
 
 for _, row in windows_df.iterrows():
@@ -275,6 +351,16 @@ for _, row in windows_df.iterrows():
 # features_df: A windowed multivariate time series representation
 features_df = pd.DataFrame(feature_rows)
 features_df = features_df.fillna(0)
+
+# features_df: 
+# One row = one fixed-length time window, summarized numerically.
+
+
+
+
+
+
+
 
 # %%
 
@@ -296,6 +382,12 @@ accuracy = accuracy_score(y_true, y_pred)
 
 cm = confusion_matrix(y_true, y_pred, labels=y_true.unique())
 cm_df = pd.DataFrame(cm, index=y_true.unique(), columns=y_true.unique())
+
+
+
+
+
+
 
 # %%
 
@@ -323,6 +415,3 @@ print(classification_report(y_true, y_pred))
 
 
 
-
-
-# %%
