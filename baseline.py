@@ -14,9 +14,6 @@ from sklearn.metrics import confusion_matrix
 
 
 
-# %% [markdown]
-# ## Helper functions
-
 # %%
 
 """
@@ -133,6 +130,7 @@ def get_dominant_room(row):
 def rule_based_predict(row):
     dominant_room = get_dominant_room(row)
     hour = row.get("hour", None)  # if you included hour earlier
+    hour
 
     # No sensor activity
     if row["total_events"] == 0:
@@ -172,9 +170,6 @@ def rule_based_predict(row):
 
 
 
-# %% [markdown]
-# ## Import data
-
 # %% 
 CSV_PATH = './hh101.csv'
 
@@ -187,7 +182,7 @@ df = pd.read_csv(
     header=None,
     names=["date", "time", "location", "state", "annotation"],
     engine="python",
-    nrows=7500 # Adjust if needed, 7500 for testing (performance)
+    nrows=15000 # Adjust if needed, 7500 for testing (performance)
 )
 
 # STEP 2: Parse timestamps into a single datetime
@@ -209,7 +204,7 @@ df = df.sort_values("timestamp").reset_index(drop=True)
 
 # %% 
 # STEP 3: Inspect annotations (sanity check)
-# df[df["annotation"].notna()].head(10)
+# df[df["annotation"].notna()]
 
 
 
@@ -351,7 +346,6 @@ for _, row in windows_df.iterrows():
 # features_df: A windowed multivariate time series representation
 features_df = pd.DataFrame(feature_rows)
 features_df = features_df.fillna(0)
-
 # features_df: 
 # One row = one fixed-length time window, summarized numerically.
 
@@ -363,6 +357,8 @@ features_df = features_df.fillna(0)
 
 
 # %%
+
+# BASELINE 0: Majority Class Predictor
 
 # print(features_df.head(150))
 # print(features_df["label"].value_counts())
@@ -378,7 +374,7 @@ y_pred = [majority_label] * len(y_true)
 
 accuracy = accuracy_score(y_true, y_pred)
 # print(accuracy)
-# print(classification_report(y_true, y_pred))
+print(classification_report(y_true, y_pred))
 
 cm = confusion_matrix(y_true, y_pred, labels=y_true.unique())
 cm_df = pd.DataFrame(cm, index=y_true.unique(), columns=y_true.unique())
@@ -415,3 +411,5 @@ print(classification_report(y_true, y_pred))
 
 
 
+
+# %%
