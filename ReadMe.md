@@ -53,6 +53,14 @@ To convert video to audio format (for example .wav) for signal analysis:
 1. Move to directory containing the video
 2. Run `ffmpeg -i ./16ef52e7-8ae6-474c-8911-a6aec7bafe58.webm  output.wav` - replace parameters with your file names
 
+## Fixing broken video
+
+When downloading the video from <b>Annotation app</b> the video's progress bar does not work and it does display duration (I am still looking for a fix). For now we can run the following command:
+
+`ffmpeg -i broken.webm -c copy fixed.webm`
+
+This rewrites the WebM container and rebuilds cues. Video should now be fixed.
+
 ## baseline.py
 
 Pipeline:
