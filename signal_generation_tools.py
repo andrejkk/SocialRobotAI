@@ -116,6 +116,7 @@ def generate_events(
     sigs_X_df,
     f_0,
     window_s=5,
+    hop_len_s = 2,
     event_defs=None
 ):
     """
@@ -124,8 +125,9 @@ def generate_events(
     """
     events = []
     win = int(window_s * f_0)
+    hop = int(hop_len_s * f_0)
 
-    for t_idx in range(win, len(sigs_X_df)):
+    for t_idx in range(win, len(sigs_X_df), hop):
         t = sigs_X_df.loc[t_idx, "time_s"]
 
         for eID, edef in event_defs.items():

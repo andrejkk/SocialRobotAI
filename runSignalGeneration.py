@@ -1,7 +1,14 @@
 #%% Imports
+import pandas as pd
 import signal_generation_tools as sgt
+import importlib
+
+importlib.reload(sgt)
 
 
+#%% Settings
+data_path = 'GenData/'
+save_Q = False
 
 
 #%% Define signals
@@ -31,39 +38,6 @@ ar_params = [
 
 
 
-#%% Define events
-event_defs = {
-    "eID_1": {
-        "criteria": sgt.event_criteria_mean,
-        "sigs": ["sig_1"],
-        #"params": {"thresh": 0.7, "mode": "gt"}
-        "params": {"thresh": 2.2, "mode": "gt"}
-    },
-    "eID_2": {
-        "criteria": sgt.event_criteria_std,
-        "sigs": ["sig_2"],
-        #"params": {"thresh": 0.15}
-        "params": {"thresh": 2.15}
-    },
-    "eID_3": {
-        "criteria": sgt.event_criteria_fft_band,
-        "sigs": ["sig_4"],
-        #"params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.01}
-        "params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 2.01}
-    },
-    "eID_4": {
-        "criteria": sgt.event_criteria_peaks,
-        "sigs": ["sig_3"],
-        #"params": {"min_peaks": 3}
-        "params": {"min_peaks": 40}
-    },
-    "eID_5": {
-        "criteria": sgt.event_criteria_mean,
-        "sigs": ["sig_1"],
-        #"params": {"thresh": 0.3, "mode": "lt"}
-        "params": {"thresh": 0.2, "mode": "lt"}
-    }
-}
 
 
 #%% Generate signals
@@ -84,21 +58,74 @@ sigs_X_df = sgt.generate_signals_Ap(
     seed=42
 )
 
+if save_Q:
+    sigs_X_df.to_excel(data_path + 'sigs_X_df.xlsx')
+
 
 #%% Generate events upon signals
 
+sigs_X_df = pd.read_excel(data_path + 'sigs_X_df.xlsx')
+
+#%% Analyse events
+event_defs = {
+    "eID_1": {
+        "criteria": sgt.event_criteria_mean,
+        "sigs": ["sig_1"],
+        #"params": {"thresh": 0.7, "mode": "gt"}
+        "params": {"thresh": 0.6, "mode": "gt"}
+    }
+}
+events_X_df = sgt.generate_events(sigs_X_df, f_0=20, window_s=5, hop_len_s=3, event_defs=event_defs)
+events_X_df
+
+
+#%% Define & generate events
+event_defs = {
+    "eID_1": {
+        "criteria": sgt.event_criteria_mean,
+        "sigs": ["sig_1"],
+        #"params": {"thresh": 0.7, "mode": "gt"}
+        "params": {"thresh": 0.7, "mode": "gt"}
+    },
+    "eID_2": {
+        "criteria": sgt.event_criteria_std,
+        "sigs": ["sig_2"],
+        #"params": {"thresh": 0.15}
+        "params": {"thresh": 0.15}
+    },
+    "eID_3": {
+        "criteria": sgt.event_criteria_fft_band,
+        "sigs": ["sig_4"],
+        #"params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.01}
+        "params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.01}
+    },
+    "eID_4": {
+        "criteria": sgt.event_criteria_peaks,
+        "sigs": ["sig_3"],
+        #"params": {"min_peaks": 3}
+        "params": {"min_peaks": 3}
+    },
+    "eID_5": {
+        "criteria": sgt.event_criteria_mean,
+        "sigs": ["sig_1"],
+        #"params": {"thresh": 0.3, "mode": "lt"}
+        "params": {"thresh": 0.3, "mode": "lt"}
+    }
+}
 
 events_X_df = sgt.generate_events(
     sigs_X_df,
     f_0=20,
     window_s=5,
+    hop_len_s=3,
     event_defs=event_defs
 )
 
 #%% Store it
-data_path = 'GenData/'
-sigs_X_df.to_excel(data_path + 'sigs_X_df.xlsx')
-events_X_df.to_excel(data_path + 'events_X_df.xlsx')
+if save_Q:
+    events_X_df.to_excel(data_path + 'events_X_df.xlsx')
+
+
 
 
 #%% Plot it
