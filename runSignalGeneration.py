@@ -84,6 +84,10 @@ sigs_X_df = sgt.generate_signals_Ap(
     seed=42
 )
 
+
+#%% Generate events upon signals
+
+
 events_X_df = sgt.generate_events(
     sigs_X_df,
     f_0=20,
