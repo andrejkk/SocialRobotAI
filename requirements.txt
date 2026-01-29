@@ -9,3 +9,4 @@ numpy
 httpx
 moviepy
 scikit-learn
+openpyxl
