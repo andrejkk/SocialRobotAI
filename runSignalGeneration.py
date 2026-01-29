@@ -29,11 +29,11 @@ ar_params = [
 ]
 
 ar_params = [
-    sgt.ar_from_timescale(8, 20, 5),   # slow tonic
-    sgt.ar_from_timescale(3, 20, 3),   # phasic
-    sgt.ar_from_timescale(4, 20, 4),
-    sgt.ar_from_timescale(2, 20, 6),
-    sgt.ar_from_timescale(5, 20, 3)
+    sgt.ar_from_timescale(8, 20, 5),    # sig_1: EDA tonic (very slow)
+    sgt.ar_from_timescale(3, 20, 3),    # sig_2: EDA phasic
+    sgt.ar_from_timescale(4, 20, 4),    # sig_3: pupil
+    sgt.ar_from_timescale(2, 20, 6),    # sig_4: HRV oscillatory
+    sgt.ar_from_timescale(5, 20, 3)     # sig_5
 ]
 
 
@@ -72,11 +72,22 @@ event_defs = {
         "criteria": sgt.event_criteria_std,
         "sigs": ["sig_2"],
         #"params": {"thresh": 0.15}
-        "params": {"thresh": 0.1}
+        "params": {"thresh": 0.21}
     }
 }
-events_X_df = sgt.generate_events(sigs_X_df, f_0=20, window_s=5, hop_len_s=3, event_defs=event_defs)
+events_X_df = sgt.generate_events(
+    sigs_X_df, 
+    f_0=20, 
+    window_s=5, hop_len_s=5, 
+    event_defs=event_defs)
 events_X_df
+sgt.plot_sigs(
+    sigs_X_df,
+    events_X_df,
+    t_int=[1, 300],
+    sigs_lst=["sig_2"],
+    events_lst=["eID_2"]
+)
 
 
 #%% Define & generate events
@@ -120,6 +131,7 @@ events_X_df = sgt.generate_events(
     hop_len_s=3,
     event_defs=event_defs
 )
+
 
 #%% Store it
 if save_Q:
