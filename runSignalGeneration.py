@@ -41,13 +41,13 @@ ar_params = [
 
 
 #%% Generate signals
-sigs_X_df = sgt.generate_signals_A1(
-    N=5,
-    f_0=20,
-    T=300,
-    lag_s=[6, 3, 4, 2, 5],
-    mu_std=[[0.5,0.1],[0.0,0.1],[3.0,0.2],[0.0,0.05],[1.0,0.1]]
-)
+#sigs_X_df = sgt.generate_signals_A1(
+#    N=5,
+#    f_0=20,
+#    T=300,
+#    lag_s=[6, 3, 4, 2, 5],
+#    mu_std=[[0.5,0.1],[0.0,0.1],[3.0,0.2],[0.0,0.05],[1.0,0.1]]
+#)
 
 sigs_X_df = sgt.generate_signals_Ap(
     N=5,
@@ -68,11 +68,11 @@ sigs_X_df = pd.read_excel(data_path + 'sigs_X_df.xlsx')
 
 #%% Analyse events
 event_defs = {
-    "eID_1": {
-        "criteria": sgt.event_criteria_mean,
-        "sigs": ["sig_1"],
-        #"params": {"thresh": 0.7, "mode": "gt"}
-        "params": {"thresh": 0.6, "mode": "gt"}
+       "eID_2": {
+        "criteria": sgt.event_criteria_std,
+        "sigs": ["sig_2"],
+        #"params": {"thresh": 0.15}
+        "params": {"thresh": 0.1}
     }
 }
 events_X_df = sgt.generate_events(sigs_X_df, f_0=20, window_s=5, hop_len_s=3, event_defs=event_defs)
@@ -132,9 +132,9 @@ if save_Q:
 sgt.plot_sigs(
     sigs_X_df,
     events_X_df,
-    t_int=[1, 300],
+    t_int=[1, 50],
     sigs_lst=["sig_1","sig_2","sig_3"],
-    events_lst=["eID_1","eID_4"]
+    events_lst=["eID_1","eID_2", "eID_4"]
 )
 
 # %%
