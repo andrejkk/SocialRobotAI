@@ -10,3 +10,4 @@ httpx
 moviepy
 scikit-learn
 librosa
+openpyxl
