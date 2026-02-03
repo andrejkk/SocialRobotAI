@@ -51,7 +51,7 @@ This is required so the script knows where to save the generated files (plots)
 To convert video to audio format (for example .wav) for signal analysis:
 
 1. Move to directory containing the video
-2. Run `ffmpeg -i ./16ef52e7-8ae6-474c-8911-a6aec7bafe58.webm  output.wav` - replace parameters with your file names
+2. Run `ffmpeg -i ./Data/66001/2025-12-11/S1/16ef52e7-8ae6-474c-8911-a6aec7bafe58.webm  ./Data/66001/2025-12-11/S1/output.wav` - replace parameters with your file names
 
 ## baseline.py
 

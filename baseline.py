@@ -1,5 +1,3 @@
-# %% [markdown]
-# ## Imports
 
 # %% 
 from datetime import datetime
@@ -171,7 +169,7 @@ def rule_based_predict(row):
 
 
 # %% 
-CSV_PATH = './hh101.csv'
+CSV_PATH = './Data-ARUBA/hh103.csv'
 
 # STEP 1: Read data from csv
 # Row with annotation:    2012-07-20	10:38:54.512364	OutsideDoor	    ON	Step_Out="begin"
@@ -373,7 +371,7 @@ y_true = features_df["label"]
 y_pred = [majority_label] * len(y_true)
 
 accuracy = accuracy_score(y_true, y_pred)
-# print(accuracy)
+print(accuracy)
 print(classification_report(y_true, y_pred))
 
 cm = confusion_matrix(y_true, y_pred, labels=y_true.unique())
