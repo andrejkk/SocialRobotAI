@@ -154,7 +154,12 @@ def plot_sigs(
 ):
     # Define colors for each event ID
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
-    event_colors = {eid: colors[i % len(colors)] for i, eid in enumerate(events_X_df['eID'].unique())}
+    # Use all event IDs from events_lst (if provided), else from events_X_df
+    if events_lst is not None:
+        unique_eids = list(events_lst)
+    else:
+        unique_eids = list(events_X_df['eID'].unique())
+    event_colors = {eid: colors[i % len(colors)] for i, eid in enumerate(unique_eids)}
     
     fig, ax = plt.subplots(len(sigs_lst), 1, figsize=(12, 2.5 * len(sigs_lst)), sharex=True)
 

@@ -77,26 +77,6 @@ event_defs = {
         "sigs": ["sig_1"],
         "params": {"thresh": 0.15}
     }
-    # "eID_2": {
-    #     "criteria": sgt.event_criteria_std, # event trigger based on signal variability
-    #     "sigs": ["sig_2"],
-    #     "params": {"thresh": 0.25}
-    # }
-    # "eID_3": {
-    #     "criteria": sgt.event_criteria_std, # event trigger based on signal variability
-    #     "sigs": ["sig_3"],
-    #     "params": {"thresh": 0.31}
-    # }
-    # "eID_4": {
-    #     "criteria": sgt.event_criteria_std, # event trigger based on signal variability
-    #     "sigs": ["sig_4"],
-    #     "params": {"thresh": 0.066}
-    # }
-    # "eID_5": {
-    #     "criteria": sgt.event_criteria_std, # event trigger based on signal variability
-    #     "sigs": ["sig_5"],
-    #     "params": {"thresh": 0.16}
-    # }
 }
 
 events_X_df = sgt.generate_events(
@@ -127,33 +107,32 @@ event_defs = {
     #     "params": {"thresh": 0.9 }
     # },
     "eID_1": {
-        "criteria": sgt.event_criteria_std, # event trigger based on signal variability
+        "criteria": sgt.event_criteria_mean, # event trigger based on signal variability
         "sigs": ["sig_1"],
-        "params": {"thresh": 0.15}
+        "params": {"thresh": 0.5}
     },
     "eID_2": {
         "criteria": sgt.event_criteria_std,
-        "sigs": ["sig_2"],
+        "sigs": ["sig_1"],
         #"params": {"thresh": 0.15}
-        "params": {"thresh": 0.2}
+        "params": {"thresh": 0.15}
     },
     "eID_3": {
         "criteria": sgt.event_criteria_fft_band,
-        "sigs": ["sig_4"],
-        #"params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.01}
-        "params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.01}
-    },
-    "eID_4": {
-        "criteria": sgt.event_criteria_std, # event trigger based on signal variability
-        "sigs": ["sig_3"],
-        "params": {"thresh": 0.25}
-    },
-    "eID_5": {
-        "criteria": sgt.event_criteria_mean,
         "sigs": ["sig_1"],
-        #"params": {"thresh": 0.3, "mode": "lt"}
-        "params": {"thresh": 0.5, "mode": "gt"}
+         "params": {"f_0": 10, "band": (0.1, 0.4), "thresh": 0.01}
     }
+    # "eID_4": {
+    #     "criteria": sgt.event_criteria_std, # event trigger based on signal variability
+    #     "sigs": ["sig_3"],
+    #     "params": {"thresh": 0.25}
+    # },
+    # "eID_5": {
+    #     "criteria": sgt.event_criteria_mean,
+    #     "sigs": ["sig_1"],
+    #     #"params": {"thresh": 0.3, "mode": "lt"}
+    #     "params": {"thresh": 0.5, "mode": "gt"}
+    # }
 }
 
 events_X_df = sgt.generate_events(
@@ -178,8 +157,8 @@ sgt.plot_sigs(
     sigs_X_df,
     events_X_df,
     t_int=[1, 50],
-    sigs_lst=["sig_1","sig_2","sig_3"],
-    events_lst=["eID_1", "eID_2", "eID_3", "eID_4", "eID_5"],
+    sigs_lst=["sig_1"],
+    events_lst=["eID_1", "eID_2", "eID_3"],
     event_defs=event_defs
 )
 
