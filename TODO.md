@@ -1,8 +1,6 @@
 # TODOs
 
-- folder structure (15.2.)
+- folder structure (15.2.) ✅
 - implement multiple baselines (15.2.)
 - check article for evaluation (15.2.)
-- multiple signals (15.2.)
-
-  ✅
+- multiple signals (15.2.) ✅

@@ -10,6 +10,7 @@ import sys
 
 
 def load_signal_data(filepath):
+    """MULTI-SIGNAL REFACTORING: Now loads all 5 signals (sig_1 through sig_5)."""
     
     filepath = Path(filepath)
     
@@ -23,8 +24,8 @@ def load_signal_data(filepath):
     except Exception as e:
         raise ValueError(f"Failed to read Excel file {filepath}: {e}")
     
-    # Validate required columns exist
-    required_cols = ['time_s', 'sig_1']
+    # CHANGED: Load all 5 signals instead of just sig_1
+    required_cols = ['time_s', 'sig_1', 'sig_2', 'sig_3', 'sig_4', 'sig_5']
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
         raise ValueError(
@@ -32,7 +33,7 @@ def load_signal_data(filepath):
             f"Available columns: {list(df.columns)}"
         )
     
-    # Extract relevant columns and sort by time
+    # Extract all signal columns and sort by time
     result = df[required_cols].copy()
     result = result.sort_values('time_s').reset_index(drop=True)
     
@@ -43,8 +44,14 @@ def compute_thresholds(signal_data, k=1.0, event_types=None):
     """
     Compute detection thresholds for each event type based on signal statistics.
     
-    Uses the formula: threshold = mean(sig_1) + k * std(sig_1)
-    Supports both uniform and per-event-type k values for flexibility.
+    MULTI-SIGNAL REFACTORING: Now computes thresholds for ALL signals (sig_1 through sig_5).
+    Uses the formula: threshold = mean(signal) + k * std(signal) for each signal.
+    
+    Returns nested dict: {
+        'eID_1': {'sig_1': 0.55, 'sig_2': 0.52, 'sig_3': 0.58, ...},
+        'eID_2': {...},
+        ...
+    }
     """
     if event_types is None:
         event_types = ['eID_1', 'eID_2', 'eID_3']
@@ -52,18 +59,16 @@ def compute_thresholds(signal_data, k=1.0, event_types=None):
     # Validate input
     if signal_data.empty:
         raise ValueError("Signal data is empty")
-    if 'sig_1' not in signal_data.columns:
-        raise ValueError("Signal data must contain 'sig_1' column")
     
-    # Compute global statistics on sig_1
-    sig_1 = signal_data['sig_1']
-    mean_val = sig_1.mean()
-    std_val = sig_1.std()
+    # CHANGED: Validate all 5 signals exist
+    signal_cols = ['sig_1', 'sig_2', 'sig_3', 'sig_4', 'sig_5']
+    missing_signals = [col for col in signal_cols if col not in signal_data.columns]
+    if missing_signals:
+        raise ValueError(f"Missing signals: {missing_signals}")
     
     # Build k_dict: convert single k value to dict if needed
     if isinstance(k, dict):
         k_dict = k
-        # Validate that all event types have k values
         for event_type in event_types:
             if event_type not in k_dict:
                 raise ValueError(
@@ -71,51 +76,94 @@ def compute_thresholds(signal_data, k=1.0, event_types=None):
                     f"Provide k values for all event types: {event_types}"
                 )
     else:
-        # Single k value applies to all event types
         k_dict = {event_type: k for event_type in event_types}
     
-    # Compute threshold for each event type using its own k value
-    thresholds = {
-        event_type: mean_val + k_dict[event_type] * std_val
-        for event_type in event_types
-    }
+    # CHANGED: Compute thresholds for EACH signal for EACH event type
+    thresholds = {}
+    for event_type in event_types:
+        k_val = k_dict[event_type]
+        thresholds[event_type] = {}
+        
+        for sig_col in signal_cols:
+            sig_data = signal_data[sig_col]
+            mean_val = sig_data.mean()
+            std_val = sig_data.std()
+            threshold_val = mean_val + k_val * std_val
+            thresholds[event_type][sig_col] = threshold_val
     
     return thresholds
 
 
 
-def detect_crossings(signal_data, thresholds):
+def detect_crossings(signal_data, thresholds, voting_threshold=3):
     """
-    Detect threshold crossings in the signal and return event detections.
+    MULTI-SIGNAL REFACTORING: Detect crossings using MAJORITY VOTING across all 5 signals.
     
-    For each event type, detects the times when sig_1 crosses ABOVE its specific threshold.
-    A crossing is detected as a transition from signal < threshold to signal >= threshold.
+    For each event type, detects when >= voting_threshold signals (default: 3 out of 5)
+    simultaneously cross ABOVE their respective thresholds.
+    
+    Parameters
+    ----------
+    signal_data : pd.DataFrame
+        Must contain: time_s, sig_1, sig_2, sig_3, sig_4, sig_5
+    thresholds : dict
+        Nested dict: {'eID_1': {'sig_1': ..., 'sig_2': ..., ...}, ...}
+    voting_threshold : int
+        Minimum number of signals that must detect crossing for event confirmation (default: 3/5)
+    
+    Returns
+    -------
+    list of tuple
+        [(time_s, event_id), ...]
     """
-
     if signal_data.empty:
         raise ValueError("Signal data is empty")
-    if 'sig_1' not in signal_data.columns or 'time_s' not in signal_data.columns:
-        raise ValueError("Signal data must contain 'time_s' and 'sig_1' columns")
+    if 'time_s' not in signal_data.columns:
+        raise ValueError("Signal data must contain 'time_s' column")
     if not thresholds:
         raise ValueError("Thresholds dictionary is empty")
     
-    sig_1 = signal_data['sig_1'].values
     time_s = signal_data['time_s'].values
+    signal_cols = ['sig_1', 'sig_2', 'sig_3', 'sig_4', 'sig_5']
     
+    # CHANGED: Collect all potential crossing times across all signals
     detections = []
     
-    # Detect crossings for each event type independently (with its own threshold)
-    for event_id, threshold_val in thresholds.items():
-        # Find indices where signal crosses above this event's threshold
-        # A crossing occurs when: sig[i-1] < threshold <= sig[i]
-        crosses_above = np.where(
-            (sig_1[:-1] < threshold_val) & (sig_1[1:] >= threshold_val)
-        )[0]
+    for event_id, event_thresholds in thresholds.items():
+        # For this event type, collect crossings from all signals
+        all_crossing_times = []
         
-        # Record each crossing for this event type
-        for idx in crosses_above:
-            crossing_time = time_s[idx + 1]  # Use the time of the sample that crossed above
-            detections.append((crossing_time, event_id))
+        for sig_col in signal_cols:
+            if sig_col not in signal_data.columns:
+                continue
+            
+            sig_data = signal_data[sig_col].values
+            threshold_val = event_thresholds[sig_col]
+            
+            # Find where signal crosses above threshold
+            crosses_above = np.where(
+                (sig_data[:-1] < threshold_val) & (sig_data[1:] >= threshold_val)
+            )[0]
+            
+            # Record all crossing times for this signal
+            for idx in crosses_above:
+                crossing_time = time_s[idx + 1]
+                all_crossing_times.append(crossing_time)
+        
+        # CHANGED: Apply MAJORITY VOTING logic
+        # Group by time to see which signals detected at each timestamp
+        if all_crossing_times:
+            # Round to nearest sample time to handle numerical precision
+            rounded_times = [round(t, 3) for t in all_crossing_times]
+            
+            # Count votes per timestamp
+            from collections import Counter
+            time_votes = Counter(rounded_times)
+            
+            # Keep only timestamps with >= voting_threshold votes
+            for voting_time, vote_count in time_votes.items():
+                if vote_count >= voting_threshold:
+                    detections.append((voting_time, event_id))
     
     # Sort by time_s
     detections.sort(key=lambda x: x[0])
@@ -351,22 +399,27 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         signal_file = sys.argv[1]
         try:
-            # Step 1: Load signal data
+            # Step 1: Load signal data (MULTI-SIGNAL REFACTORING: now loads all 5 signals)
             data = load_signal_data(signal_file)
             print(f"✓ Successfully loaded signal data:")
             print(f"  Shape: {data.shape}")
+            print(f"  Signals: {[col for col in data.columns if col.startswith('sig_')]}")
+            print(f"  Time range: {data['time_s'].min():.2f}s - {data['time_s'].max():.2f}s")
             
-            # Step 2: Compute thresholds with differentiated k values per event type
-            print(f"\n✓ Computing differentiated thresholds (Option B):")
-            k_values = {'eID_1': 0.5, 'eID_2': 1.0, 'eID_3': 1.5}
+            # Step 2: Compute thresholds (MULTI-SIGNAL REFACTORING: now per-signal thresholds)
+            print(f"\n✓ Computing thresholds for all signals:")
+            k_values = {'eID_1': 0.5, 'eID_2': 0.5, 'eID_3': 0.5}
             thresholds = compute_thresholds(data, k=k_values)
             print(f"  k values: {k_values}")
-            for event_id, threshold in sorted(thresholds.items()):
-                print(f"    {event_id}: threshold = {threshold:.4f}")
+            print(f"  Thresholds per event type and signal:")
+            for event_id in sorted(thresholds.keys()):
+                print(f"    {event_id}:")
+                for sig_col in sorted(thresholds[event_id].keys()):
+                    print(f"      {sig_col}: {thresholds[event_id][sig_col]:.4f}")
             
-            # Step 3: Detect threshold crossings with differentiated thresholds
-            print(f"\n✓ Detecting threshold crossings with differentiated thresholds:")
-            detections = detect_crossings(data, thresholds)
+            # Step 3: Detect threshold crossings (MULTI-SIGNAL REFACTORING: majority voting 3/5)
+            print(f"\n✓ Detecting crossings with MAJORITY VOTING (3 out of 5 signals):")
+            detections = detect_crossings(data, thresholds, voting_threshold=2)
             print(f"  Total detections: {len(detections)}")
             
             # Count detections per event type before refractory period
