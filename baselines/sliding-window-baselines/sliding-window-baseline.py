@@ -1,14 +1,26 @@
 """
-Z-Score / Normalized Thresholding Baseline Event Detection Algorithm
+Sliding Window Energy / Variance Detector Baseline Event Detection Algorithm
 
-Detects events when normalized signal magnitude |z| exceeds threshold.
-More robust to signal scale variations than absolute thresholds.
+Detects events when windowed energy across multiple signals exceeds threshold.
+Uses multi-channel voting to confirm events and assigns event type by round-robin.
 """
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import sys
+import json
+from datetime import datetime, timezone
+
+
+# ============================================================================
+# HARDCODED PARAMETERS
+# ============================================================================
+WINDOW_SIZE = 40  # samples (2 seconds @ 20 Hz)
+THRESHOLD_K = 0.5  # threshold = mean_energy + k * std_energy (lowered from 1.5 for better sensitivity)
+VOTING_THRESHOLD = 2  # minimum number of signals (out of 5) that must exceed threshold (lowered from 3)
+REFRACTORY_PERIOD = 2.0  # seconds between consecutive detections of same event type
+TIME_TOLERANCE = 1.0  # seconds for ground truth comparison
 
 
 def load_signal_data(filepath):
@@ -41,51 +53,68 @@ def load_signal_data(filepath):
     return result
 
 
-def compute_z_scores(signal_data):
+def compute_windowed_energy(signal_data, window_size=WINDOW_SIZE):
     """
-    STEP 2: Compute z-scores for all signals.
+    STEP 2: Compute windowed energy for all signals.
     
-    z(t) = (signal(t) - mean) / std
+    For each signal and time t, compute:
+        E(t) = (1/W) * sum(sig(k)^2) for k in [t-W+1, t]
     
-    Returns DataFrame with z-scores for each signal.
-    New columns will be z_sig_1, z_sig_2, z_sig_3, z_sig_4, z_sig_5
+    Uses a rolling window approach. At the start, uses available samples.
+    
+    Parameters
+    ----------
+    signal_data : pd.DataFrame
+        Must contain: time_s, sig_1, sig_2, sig_3, sig_4, sig_5
+    window_size : int, default=40
+        Window size in samples
+    
+    Returns
+    -------
+    pd.DataFrame
+        Original data plus new columns: energy_sig_1, energy_sig_2, ..., energy_sig_5
     """
-    z_scores = signal_data.copy()
+    energy_data = signal_data.copy()
     
     signal_cols = ['sig_1', 'sig_2', 'sig_3', 'sig_4', 'sig_5']
     
     for sig_col in signal_cols:
-        sig_data = signal_data[sig_col]
-        mean_val = sig_data.mean()
-        std_val = sig_data.std()
+        sig_values = signal_data[sig_col].values
         
-        # Avoid division by zero
-        if std_val == 0:
-            z_col_name = f'z_{sig_col}'
-            z_scores[z_col_name] = 0.0
-        else:
-            z_col_name = f'z_{sig_col}'
-            z_scores[z_col_name] = (sig_data - mean_val) / std_val
+        # Compute rolling energy: (1/W) * sum(sig^2)
+        # Use pandas rolling with center=False (default), min_periods varies from 1 to window_size
+        rolled = pd.Series(sig_values).rolling(
+            window=window_size,
+            min_periods=1,  # At start, use available samples
+            center=False
+        )
+        
+        # Energy = mean of squared values in window
+        energy_col_name = f'energy_{sig_col}'
+        energy_data[energy_col_name] = rolled.apply(lambda x: np.mean(x**2), raw=False)
     
-    return z_scores
+    return energy_data
 
 
-def detect_anomalies(z_data, threshold_z=2.0, event_types=None, voting_threshold=3):
+def detect_events_by_energy(energy_data, threshold_k=THRESHOLD_K, event_types=None, voting_threshold=VOTING_THRESHOLD):
     """
-    STEP 3: Detect anomalies when |z-score| > threshold_z
+    STEP 3: Detect events when windowed energy exceeds threshold with multi-channel voting.
     
-    Then apply MAJORITY VOTING: event confirmed if >= voting_threshold signals detect it.
+    For each signal, compute threshold as: T = mean(energy) + k * std(energy)
+    At each timestamp, count how many signals have E(t) >= T.
+    If count >= voting_threshold, event is detected.
+    Event type assigned via round-robin over detected timestamps.
     
     Parameters
     ----------
-    z_data : pd.DataFrame
-        Z-score data from compute_z_scores() with columns: time_s, z_sig_1, ..., z_sig_5
-    threshold_z : float, default=2.0
-        Z-score threshold. Default 2.0 means 2 std devs (95% of normal data).
+    energy_data : pd.DataFrame
+        Energy data from compute_windowed_energy() with columns: time_s, energy_sig_1, ..., energy_sig_5
+    threshold_k : float, default=1.5
+        Multiplier for threshold: T = mean + k * std
     event_types : list, default=['eID_1', 'eID_2', 'eID_3']
-        Event type IDs.
+        Event type IDs to cycle through
     voting_threshold : int, default=3
-        Minimum number of signals that must detect anomaly (out of 5).
+        Minimum number of signals (out of 5) that must exceed threshold
     
     Returns
     -------
@@ -95,46 +124,48 @@ def detect_anomalies(z_data, threshold_z=2.0, event_types=None, voting_threshold
     if event_types is None:
         event_types = ['eID_1', 'eID_2', 'eID_3']
     
-    if z_data.empty:
-        raise ValueError("Z-score data is empty")
+    if energy_data.empty:
+        raise ValueError("Energy data is empty")
     
-    time_s = z_data['time_s'].values
-    z_cols = ['z_sig_1', 'z_sig_2', 'z_sig_3', 'z_sig_4', 'z_sig_5']
+    time_s = energy_data['time_s'].values
+    energy_cols = ['energy_sig_1', 'energy_sig_2', 'energy_sig_3', 'energy_sig_4', 'energy_sig_5']
     
-    # Detect anomalies: |z| > threshold_z
-    # This detects BOTH positive and negative deviations
-    anomaly_indices = []
-    anomaly_vote_counts = []
+    # Compute thresholds for each signal
+    thresholds = {}
+    for energy_col in energy_cols:
+        mean_e = energy_data[energy_col].mean()
+        std_e = energy_data[energy_col].std()
+        threshold = mean_e + threshold_k * std_e
+        thresholds[energy_col] = threshold
     
-    for idx in range(len(z_data)):
-        # Count how many signals detect anomaly at this timestamp
+    # Detect events: for each timestamp, count how many signals exceed their threshold
+    event_indices = []
+    
+    for idx in range(len(energy_data)):
         vote_count = 0
-        for z_col in z_cols:
-            z_val = z_data.iloc[idx][z_col]
-            if np.abs(z_val) > threshold_z:
+        for energy_col in energy_cols:
+            energy_val = energy_data.iloc[idx][energy_col]
+            if energy_val >= thresholds[energy_col]:
                 vote_count += 1
         
-        # If enough signals agree, record this as an anomaly time
+        # If enough signals agree, record this as event time
         if vote_count >= voting_threshold:
-            anomaly_indices.append(idx)
-            anomaly_vote_counts.append(vote_count)
+            event_indices.append(idx)
     
-    # Convert indices to times and assign to event types
-    # For simplicity, cycle through event types at each anomaly
+    # Convert indices to times and assign event types via round-robin
     detections = []
-    for i, idx in enumerate(anomaly_indices):
-        anomaly_time = time_s[idx]
-        # Assign event type based on position in anomaly list (round-robin)
+    for i, idx in enumerate(event_indices):
+        event_time = time_s[idx]
         event_type = event_types[i % len(event_types)]
-        detections.append((anomaly_time, event_type))
+        detections.append((event_time, event_type))
     
     # Sort by time
     detections.sort(key=lambda x: x[0])
     
-    return detections, anomaly_vote_counts, anomaly_indices
+    return detections, thresholds
 
 
-def apply_refractory_period(detections, refractory_period=2.0):
+def apply_refractory_period(detections, refractory_period=REFRACTORY_PERIOD):
     """
     STEP 4: Apply refractory period to remove duplicate detections.
     
@@ -187,7 +218,7 @@ def apply_refractory_period(detections, refractory_period=2.0):
 
 def load_ground_truth(filepath):
     """
-    STEP 5: Load ground truth events from Excel file.
+    Load ground truth events from Excel file.
     """
     filepath = Path(filepath)
     
@@ -236,7 +267,7 @@ def format_output(detections, output_file=None):
     return df
 
 
-def compare_predictions(predicted_df, ground_truth_df, time_tolerance=0.5):
+def compare_predictions(predicted_df, ground_truth_df, time_tolerance=TIME_TOLERANCE):
     """
     STEP 5: Compare predicted vs ground truth events with detailed logging.
     """
@@ -315,10 +346,10 @@ def compare_predictions(predicted_df, ground_truth_df, time_tolerance=0.5):
     print("\n" + "="*80)
     print("SUMMARY STATISTICS")
     print("="*80)
-    
+
     print(f"Time Tolerance: {TIME_TOLERANCE:.2f} seconds")
     print(f"Voting Threshold: {VOTING_THRESHOLD}/5 signals")
-
+    
     tp_count = len(true_positives)
     fp_count = len(false_positives)
     fn_count = len(false_negatives)
@@ -352,13 +383,31 @@ def compare_predictions(predicted_df, ground_truth_df, time_tolerance=0.5):
               f"Prec={event_precision:.4f}  Rec={event_recall:.4f}  F1={event_f1:.4f}")
     
     print("="*80)
+    
+    return {
+        'tp': tp_count,
+        'fp': fp_count,
+        'fn': fn_count,
+        'precision': float(precision),
+        'recall': float(recall),
+        'f1': float(f1),
+    }
+
+
+def _format_metric(val, digits=4):
+    """Format a metric value for display in results table."""
+    if val is None:
+        return '—'
+    if isinstance(val, (int, np.integer)):
+        return str(int(val))
+    if isinstance(val, (float, np.floating)):
+        return f"{float(val):.{digits}f}"
+    return str(val)
 
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         signal_file = sys.argv[1]
-        VOTING_THRESHOLD = 2
-        TIME_TOLERANCE = 1
         try:
             # STEP 1: Load signal data
             print("="*80)
@@ -368,51 +417,93 @@ if __name__ == '__main__':
             data = load_signal_data(signal_file)
             print(f"✓ Successfully loaded signal data:")
             print(f"  Shape: {data.shape}")
+            print(f"  Columns: {list(data.columns)}")
+            print(f"  Time range: {data['time_s'].min():.2f}s - {data['time_s'].max():.2f}s")
             
-            # STEP 2: Compute z-scores
+            # STEP 2: Compute windowed energy
             print("\n" + "="*80)
-            print("STEP 2: Compute Z-Scores")
+            print("STEP 2: Compute Windowed Energy")
             print("="*80)
+            print(f"  Window Size: {WINDOW_SIZE} samples")
+            print(f"  Threshold k: {THRESHOLD_K}")
             
-            z_data = compute_z_scores(data)
+            energy_data = compute_windowed_energy(data, window_size=WINDOW_SIZE)
             
-            print(f"\nZ-Score Statistics:")
+            print(f"\n✓ Computed windowed energy for all 5 signals")
+            print(f"  Energy columns: {[col for col in energy_data.columns if col.startswith('energy_')]}")
             
+            # Show energy statistics
+            print(f"\nEnergy Statistics:")
+            print("-"*80)
+            energy_cols = ['energy_sig_1', 'energy_sig_2', 'energy_sig_3', 'energy_sig_4', 'energy_sig_5']
+            for energy_col in energy_cols:
+                mean_e = energy_data[energy_col].mean()
+                std_e = energy_data[energy_col].std()
+                threshold_e = mean_e + THRESHOLD_K * std_e
+                print(f"{energy_col:<25} Mean={mean_e:.6f}  Std={std_e:.6f}  Threshold(k={THRESHOLD_K})={threshold_e:.6f}")
             
-            print(f"\nFirst 10 rows with z-scores:")
-            print(z_data[[col for col in z_data.columns if col in ['time_s', 'sig_1', 'z_sig_1', 'sig_2', 'z_sig_2']]].head(10))
+            # Show first 15 rows with original signals and computed energy
+            print(f"\nFirst 15 rows (signals + energy):")
+            print("-"*80)
+            display_cols = ['time_s', 'sig_1', 'energy_sig_1', 'sig_2', 'energy_sig_2', 'sig_3', 'energy_sig_3']
+            print(energy_data[display_cols].head(15).to_string())
             
-            # STEP 3: Detect anomalies using z-score thresholds with majority voting
+            # STEP 3: Detect events using windowed energy with multi-channel voting
             print("\n" + "="*80)
-            print("STEP 3: Detect Anomalies (Z-Score > 2.0) with Majority Voting (3/5)")
+            print("STEP 3: Detect Events (Windowed Energy with Multi-Channel Voting)")
             print("="*80)
+            print(f"  Voting Threshold: {VOTING_THRESHOLD}/5 signals")
             
-            threshold_z = 1.5
-            detections, vote_counts, anomaly_indices = detect_anomalies(
-                z_data, 
-                threshold_z=threshold_z, 
+            detections, thresholds = detect_events_by_energy(
+                energy_data,
+                threshold_k=THRESHOLD_K,
                 voting_threshold=VOTING_THRESHOLD
             )
             
-            # Count detections per event type
-            detection_counts = {}
-            for time_s_val, event_id in detections:
-                detection_counts[event_id] = detection_counts.get(event_id, 0) + 1
-
+            print(f"\n✓ Event detection complete:")
+            print(f"  Total detections (before refractory): {len(detections)}")
+            
+            # Count detections per event type before refractory period
+            detection_counts_before = {}
+            for time_s, event_id in detections:
+                detection_counts_before[event_id] = detection_counts_before.get(event_id, 0) + 1
+            
+            print(f"  Detections per event type (before refractory):")
+            for event_id in sorted(detection_counts_before.keys()):
+                print(f"    {event_id}: {detection_counts_before[event_id]} detections")
+            
+            if detections:
+                print(f"\n  First 15 detections:")
+                for i, (time_s, event_id) in enumerate(detections[:15]):
+                    print(f"    {i+1}. time={time_s:.2f}s, event={event_id}")
             
             # STEP 4: Apply refractory period
             print("\n" + "="*80)
             print("STEP 4: Apply Refractory Period")
             print("="*80)
+            print(f"  Refractory Period: {REFRACTORY_PERIOD}s")
             
-            refractory_period = 2.0
-            detections_filtered = apply_refractory_period(detections, refractory_period=refractory_period)
+            detections_filtered = apply_refractory_period(detections, refractory_period=REFRACTORY_PERIOD)
+            
+            print(f"\n✓ Refractory period applied:")
+            print(f"  Total detections (after refractory): {len(detections_filtered)}")
             
             # Count detections per event type after refractory period
             detection_counts_after = {}
-            for time_val, event_id in detections_filtered:
+            for time_s, event_id in detections_filtered:
                 detection_counts_after[event_id] = detection_counts_after.get(event_id, 0) + 1
             
+            print(f"  Detections per event type (after refractory):")
+            for event_id in sorted(detection_counts_after.keys()):
+                before = detection_counts_before.get(event_id, 0)
+                after = detection_counts_after.get(event_id, 0)
+                reduction = before - after
+                print(f"    {event_id}: {after} detections (removed {reduction})")
+            
+            if detections_filtered:
+                print(f"\n  First 15 detections after refractory:")
+                for i, (time_s, event_id) in enumerate(detections_filtered[:15]):
+                    print(f"    {i+1}. time={time_s:.2f}s, event={event_id}")
             
             # STEP 5: Format output and compare with ground truth
             print("\n" + "="*80)
@@ -435,21 +526,22 @@ if __name__ == '__main__':
                 print(f"  Total events: {len(ground_truth_df)}")
                 
                 # Compare predictions with ground truth
-                compare_predictions(predicted_df, ground_truth_df, time_tolerance=TIME_TOLERANCE)
+                metrics = compare_predictions(predicted_df, ground_truth_df, time_tolerance=TIME_TOLERANCE)
                 
                 # Save predictions
-                output_file = 'predicted_events_zscore.xlsx'
+                output_file = 'predicted_events_energy.xlsx'
                 format_output(detections_filtered, output_file=output_file)
                 print(f"\n✓ Predictions saved to: {output_file}")
             else:
                 print(f"\n⚠ Ground truth file not found: {events_file.name}")
                 print(f"  Showing predicted events:")
-                print(predicted_df)
-            
+                print(predicted_df.to_string())
+                
+
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc()
             sys.exit(1)
     else:
-        print("Usage: python z-score-baseline.py <path_to_sigs_X_df.xlsx>")
+        print("Usage: python sliding-window-baseline.py <path_to_sigs_X_df.xlsx>")

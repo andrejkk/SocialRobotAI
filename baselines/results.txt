@@ -1,0 +1,70 @@
+Results
+
+Z-score baseline
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+Time Tolerance: 1.00 seconds
+Voting Threshold: 2/5 signals
+
+True Positives (TP):  36
+False Positives (FP): 237
+False Negatives (FN): 54
+
+Precision: 0.1319
+Recall:    0.4000
+F1-Score:  0.1983
+
+Per-Event-Type Breakdown:
+--------------------------------------------------------------------------------
+eID_1      TP=24  FP=69  FN=21   Prec=0.2581  Rec=0.5333  F1=0.3478
+eID_2      TP=4   FP=85  FN=8    Prec=0.0449  Rec=0.3333  F1=0.0792
+eID_3      TP=8   FP=83  FN=25   Prec=0.0879  Rec=0.2424  F1=0.1290
+================================================================================
+
+Threshold based baseline
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+Time Tolerance: 1.00 seconds
+Voting Threshold: 2/5 signals
+
+True Positives (TP):  50
+False Positives (FP): 286
+False Negatives (FN): 40
+
+Precision: 0.1488
+Recall:    0.5556
+F1-Score:  0.2347
+
+Per-Event-Type Breakdown:
+--------------------------------------------------------------------------------
+eID_1      TP=36  FP=76  FN=9    Prec=0.3214  Rec=0.8000  F1=0.4586
+eID_2      TP=5   FP=107 FN=7    Prec=0.0446  Rec=0.4167  F1=0.0806
+eID_3      TP=9   FP=103 FN=24   Prec=0.0804  Rec=0.2727  F1=0.1241
+================================================================================
+
+Sliding window baseline 
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+Time Tolerance: 1.00 seconds
+Voting Threshold: 2/5 signals
+
+True Positives (TP):  37
+False Positives (FP): 201
+False Negatives (FN): 53
+
+Precision: 0.1555
+Recall:    0.4111
+F1-Score:  0.2256
+
+Per-Event-Type Breakdown:
+--------------------------------------------------------------------------------
+eID_1      TP=28  FP=52  FN=17   Prec=0.3500  Rec=0.6222  F1=0.4480
+eID_2      TP=4   FP=75  FN=8    Prec=0.0506  Rec=0.3333  F1=0.0879
+eID_3      TP=5   FP=74  FN=28   Prec=0.0633  Rec=0.1515  F1=0.0893
+================================================================================

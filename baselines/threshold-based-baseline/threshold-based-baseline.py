@@ -358,6 +358,9 @@ def compare_predictions(predicted_df, ground_truth_df, time_tolerance=1.0):
     print("\n" + "="*80)
     print("SUMMARY STATISTICS")
     print("="*80)
+
+    print(f"Time Tolerance: {TIME_TOLERANCE:.2f} seconds")
+    print(f"Voting Threshold: {VOTING_THRESHOLD}/5 signals")
     
     tp_count = len(true_positives)
     fp_count = len(false_positives)
@@ -398,6 +401,9 @@ def compare_predictions(predicted_df, ground_truth_df, time_tolerance=1.0):
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         signal_file = sys.argv[1]
+        TIME_TOLERANCE = 1.0
+        VOTING_THRESHOLD = 2
+
         try:
             # Step 1: Load signal data (MULTI-SIGNAL REFACTORING: now loads all 5 signals)
             data = load_signal_data(signal_file)
@@ -419,7 +425,7 @@ if __name__ == '__main__':
             
             # Step 3: Detect threshold crossings (MULTI-SIGNAL REFACTORING: majority voting 3/5)
             print(f"\n✓ Detecting crossings with MAJORITY VOTING (3 out of 5 signals):")
-            detections = detect_crossings(data, thresholds, voting_threshold=2)
+            detections = detect_crossings(data, thresholds, voting_threshold=VOTING_THRESHOLD)
             print(f"  Total detections: {len(detections)}")
             
             # Count detections per event type before refractory period
@@ -471,7 +477,7 @@ if __name__ == '__main__':
                 print(f"  {events_file.name}")
                 
                 # Compare predictions with ground truth
-                compare_predictions(predicted_df, ground_truth_df, time_tolerance=1.0)
+                compare_predictions(predicted_df, ground_truth_df, time_tolerance=TIME_TOLERANCE)
                 
                 # Optionally save predictions to file
                 output_file = 'predicted_X_df_baseline.xlsx'
