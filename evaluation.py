@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
 
 def perturb_events(events_df, time_noise_std=0.5, flip_prob=0.2, event_ids=None, seed=None):
@@ -81,20 +82,20 @@ def evaluate_events(gt_df, pred_df, time_tol=0.1):
     }
 
 
-def plot_signals_with_events(sigs_df, gt_events_df, perturbed_events_df, t_int=[1, 50], sigs_lst=None, event_defs=None):
+def plot_signals_with_events(sigs_df, gt_events_df, pred_events_df, t_int=[1, 50], sigs_lst=None, event_defs=None, output_path='GenData/events_evaluation_plot.png'):
     """
-    Plot signals with both ground truth and perturbed events overlaid.
-    Only plots events on their corresponding signals.
-    Ground truth events are solid lines, perturbed events are dashed lines.
+    Plot signals with both ground truth and predicted events overlaid.
+    Ground truth events are shown as solid lines, predicted events as dashed lines.
     Different event IDs have different colors.
     
     Parameters:
     - sigs_df: Signals DataFrame with 'time_s' and signal columns
     - gt_events_df: Ground truth events DataFrame
-    - perturbed_events_df: Perturbed events DataFrame
+    - pred_events_df: Predicted events DataFrame
     - t_int: Time interval to plot [start, end]
     - sigs_lst: List of signal names to plot (if None, plots first signal)
     - event_defs: Dictionary mapping event IDs to their signal definitions
+    - output_path: Path to save the plot (default: GenData/events_evaluation_plot.png)
     """
     if sigs_lst is None:
         sigs_lst = [col for col in sigs_df.columns if col.startswith('sig_')][:1]
@@ -103,7 +104,6 @@ def plot_signals_with_events(sigs_df, gt_events_df, perturbed_events_df, t_int=[
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
     gt_event_ids = gt_events_df['eID'].unique()
     event_colors = {eid: colors[i % len(colors)] for i, eid in enumerate(gt_event_ids)}
-    perturbed_color = 'darkred'  # All perturbed events use this color
     
     # Filter signals by time interval
     mask = (sigs_df['time_s'] >= t_int[0]) & (sigs_df['time_s'] <= t_int[1])
@@ -111,7 +111,7 @@ def plot_signals_with_events(sigs_df, gt_events_df, perturbed_events_df, t_int=[
     
     # Filter events by time interval
     gt_filtered = gt_events_df[(gt_events_df['time_s'] >= t_int[0]) & (gt_events_df['time_s'] <= t_int[1])]
-    perturbed_filtered = perturbed_events_df[(perturbed_events_df['time_s'] >= t_int[0]) & (perturbed_events_df['time_s'] <= t_int[1])]
+    pred_filtered = pred_events_df[(pred_events_df['time_s'] >= t_int[0]) & (pred_events_df['time_s'] <= t_int[1])]
     
     # Create plot
     fig, axes = plt.subplots(len(sigs_lst), 1, figsize=(14, 4 * len(sigs_lst)))
@@ -124,9 +124,9 @@ def plot_signals_with_events(sigs_df, gt_events_df, perturbed_events_df, t_int=[
         # Plot signal
         ax.plot(sigs_filtered['time_s'], sigs_filtered[sig_name], 'b-', linewidth=1.5, label='Signal')
         
-        # Track which event IDs have been labeled
-        label_added = set()
-        perturbed_labeled = False
+        # Track which event IDs have been labeled (for both GT and predicted)
+        gt_label_added = set()
+        pred_label_added = set()
         
         # Plot ground truth events (solid lines, different color per event ID)
         for _, event in gt_filtered.iterrows():
@@ -137,104 +137,91 @@ def plot_signals_with_events(sigs_df, gt_events_df, perturbed_events_df, t_int=[
             if should_plot:
                 color = event_colors[event['eID']]
                 # Label only the first occurrence of each event ID
-                if event['eID'] not in label_added:
+                if event['eID'] not in gt_label_added:
                     label = f"{event['eID']} (GT)"
-                    label_added.add(event['eID'])
+                    gt_label_added.add(event['eID'])
                 else:
                     label = ''
                 ax.axvline(x=event['time_s'], color=color, linestyle='-', linewidth=2, alpha=0.7, label=label)
                 ax.text(event['time_s'], ax.get_ylim()[1] * 0.95, event['eID'], rotation=90, color=color, fontsize=8)
         
-        # Plot perturbed events (dashed lines, all same color)
-        for _, event in perturbed_filtered.iterrows():
+        # Plot predicted events (dashed lines, different color per event ID)
+        for _, event in pred_filtered.iterrows():
             should_plot = True
             if event_defs and event['eID'] in event_defs:
                 should_plot = sig_name in event_defs[event['eID']]['sigs']
             
             if should_plot:
-                # Label only the first perturbed event
-                label = 'Perturbed' if not perturbed_labeled else ''
-                ax.axvline(x=event['time_s'], color=perturbed_color, linestyle='--', linewidth=2, alpha=0.7, label=label)
-                ax.text(event['time_s'], ax.get_ylim()[1] * 0.85, event['eID'], rotation=90, color=perturbed_color, fontsize=8)
-                perturbed_labeled = True
+                color = event_colors.get(event['eID'], 'gray')  # Use gray for unknown event IDs
+                # Label only the first occurrence of each event ID
+                if event['eID'] not in pred_label_added:
+                    label = f"{event['eID']} (Pred)"
+                    pred_label_added.add(event['eID'])
+                else:
+                    label = ''
+                ax.axvline(x=event['time_s'], color=color, linestyle='--', linewidth=2, alpha=0.7, label=label)
+                ax.text(event['time_s'], ax.get_ylim()[1] * 0.85, event['eID'], rotation=90, color=color, fontsize=8)
         
         ax.set_xlabel('Time (s)')
         ax.set_ylabel(sig_name)
-        ax.set_title(f'{sig_name} with Ground Truth (solid, colors by event ID) vs Perturbed Events (dashed, dark red)')
+        ax.set_title(f'{sig_name} with Ground Truth (solid) vs Predicted Events (dashed)')
         ax.legend(loc='upper right', fontsize=8)
         ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('GenData/events_comparison_plot.png', dpi=100, bbox_inches='tight')
-    print("Plot saved to GenData/events_comparison_plot.png")
+    plt.savefig(output_path, dpi=100, bbox_inches='tight')
+    print(f"Plot saved to {output_path}")
     plt.close()
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Evaluate predicted events against ground truth events')
+    parser.add_argument('gt_file', help='Path to ground truth events xlsx file')
+    parser.add_argument('pred_file', help='Path to predicted events xlsx file')
+    parser.add_argument('--signals-file', default='GenData/sigs_X_df.xlsx', help='Path to signals xlsx file (default: GenData/sigs_X_df.xlsx)')
+    parser.add_argument('--time-tol', type=float, default=0.1, help='Time tolerance for matching events in seconds (default: 0.1)')
+    parser.add_argument('--output', default='GenData/events_evaluation_plot.png', help='Output path for the plot (default: GenData/events_evaluation_plot.png)')
+    
+    args = parser.parse_args()
+    
     # Load ground truth events
-    events_X_df = pd.read_excel('GenData/events_X_df.xlsx')
-    print("Loaded events_X_df:")
-    print(events_X_df.head())
-    print(f"Total events: {len(events_X_df)}\n")
+    print(f"Loading ground truth events from: {args.gt_file}")
+    gt_events_df = pd.read_excel(args.gt_file)
+    print("Loaded ground truth events:")
+    print(gt_events_df.head())
+    print(f"Total ground truth events: {len(gt_events_df)}\n")
     
-    # Get unique event IDs
-    event_ids = list(events_X_df['eID'].unique())
-    print(f"Event IDs: {event_ids}\n")
+    # Load predicted events
+    print(f"Loading predicted events from: {args.pred_file}")
+    pred_events_df = pd.read_excel(args.pred_file)
+    print("Loaded predicted events:")
+    print(pred_events_df.head())
+    print(f"Total predicted events: {len(pred_events_df)}\n")
     
-    # Define event_defs (mapping events to their signals)
-    event_defs = {
-        "eID_1": {"sigs": ["sig_1"]},
-        "eID_2": {"sigs": ["sig_2"]},
-        "eID_3": {"sigs": ["sig_4"]},
-        "eID_4": {"sigs": ["sig_3"]},
-        "eID_5": {"sigs": ["sig_1"]}
-    }
-    
-    # Evaluation 1: Ground truth vs. itself (should be perfect)
+    # Evaluate predicted events against ground truth
     print("=" * 60)
-    print("Evaluation 1: Ground Truth vs. Ground Truth (Perfect Match)")
+    print("Evaluation: Ground Truth vs. Predicted Events")
     print("=" * 60)
-    result_perfect = evaluate_events(events_X_df, events_X_df, time_tol=0.1)
-    print(f"Precision: {result_perfect['precision']:.4f}")
-    print(f"Recall: {result_perfect['recall']:.4f}")
-    print(f"F1-Score: {result_perfect['f1']:.4f}")
-    print(f"Matched: {result_perfect['matched']} / {result_perfect['total_pred']}\n")
-    
-    # Evaluation 2: Ground truth vs. perturbed (should be worse)
-    print("=" * 60)
-    print("Evaluation 2: Ground Truth vs. Perturbed Events")
-    print("=" * 60)
-    perturbed_events = perturb_events(
-        events_X_df,
-        time_noise_std=0.5,
-        flip_prob=0.9,
-        event_ids=event_ids,
-        seed=42
-    )
-    print("Perturbed events_X_df:")
-    print(perturbed_events.head())
-    print(f"Total perturbed events: {len(perturbed_events)}\n")
-    
-    result_perturbed = evaluate_events(events_X_df, perturbed_events, time_tol=0.1)
-    print(f"Precision: {result_perturbed['precision']:.4f}")
-    print(f"Recall: {result_perturbed['recall']:.4f}")
-    print(f"F1-Score: {result_perturbed['f1']:.4f}")
-    print(f"Matched: {result_perturbed['matched']} / {result_perturbed['total_pred']}\n")
-    
-    # Save perturbed events for later use
-    perturbed_events.to_excel('GenData/perturbed_events.xlsx', index=False)
-    print("Perturbed events saved to GenData/perturbed_events.xlsx")
+    result = evaluate_events(gt_events_df, pred_events_df, time_tol=args.time_tol)
+    print(f"Precision: {result['precision']:.4f}")
+    print(f"Recall: {result['recall']:.4f}")
+    print(f"F1-Score: {result['f1']:.4f}")
+    print(f"Matched: {result['matched']} / {result['total_pred']}\n")
     
     # Visualization: Load signals and plot with both event types
-    print("\n" + "=" * 60)
-    print("Visualization: Signals with Ground Truth vs Perturbed Events")
     print("=" * 60)
-    sigs_X_df = pd.read_excel('GenData/sigs_X_df.xlsx')
-    plot_signals_with_events(
-        sigs_X_df,
-        events_X_df,
-        perturbed_events,
-        t_int=[1, 50],
-        sigs_lst=["sig_1", "sig_2", "sig_3"],
-        event_defs=event_defs
-    )
+    print("Visualization: Signals with Ground Truth Events")
+    print("=" * 60)
+    try:
+        sigs_X_df = pd.read_excel(args.signals_file)
+        plot_signals_with_events(
+            sigs_X_df,
+            gt_events_df,
+            pred_events_df,
+            t_int=[sigs_X_df['time_s'].min(), sigs_X_df['time_s'].max()],
+            sigs_lst=None,
+            event_defs=None,
+            output_path=args.output
+        )
+    except FileNotFoundError:
+        print(f"Warning: Signals file not found at {args.signals_file}. Skipping visualization.")

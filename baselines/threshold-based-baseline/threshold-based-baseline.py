@@ -401,7 +401,7 @@ def compare_predictions(predicted_df, ground_truth_df, time_tolerance=1.0):
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         signal_file = sys.argv[1]
-        TIME_TOLERANCE = 1.0
+        TIME_TOLERANCE = 1
         VOTING_THRESHOLD = 2
 
         try:
@@ -414,7 +414,7 @@ if __name__ == '__main__':
             
             # Step 2: Compute thresholds (MULTI-SIGNAL REFACTORING: now per-signal thresholds)
             print(f"\n✓ Computing thresholds for all signals:")
-            k_values = {'eID_1': 0.5, 'eID_2': 0.5, 'eID_3': 0.5}
+            k_values = {'eID_1': 1.5, 'eID_2': 1.5, 'eID_3': 1.5}
             thresholds = compute_thresholds(data, k=k_values)
             print(f"  k values: {k_values}")
             print(f"  Thresholds per event type and signal:")

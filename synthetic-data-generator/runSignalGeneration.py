@@ -109,18 +109,18 @@ event_defs = {
     "eID_1": {
         "criteria": sgt.event_criteria_mean, # event trigger based on signal variability
         "sigs": ["sig_1"],
-        "params": {"thresh": 0.5}
+        "params": {"thresh": 0.6}
     },
     "eID_2": {
         "criteria": sgt.event_criteria_std,
         "sigs": ["sig_1"],
         #"params": {"thresh": 0.15}
-        "params": {"thresh": 0.15}
+        "params": {"thresh": 0.18}
     },
     "eID_3": {
         "criteria": sgt.event_criteria_fft_band,
         "sigs": ["sig_1"],
-         "params": {"f_0": 10, "band": (0.1, 0.4), "thresh": 0.01}
+         "params": {"f_0": 10, "band": (0.1, 0.4), "thresh": 0.02}
     }
     # "eID_4": {
     #     "criteria": sgt.event_criteria_std, # event trigger based on signal variability
@@ -143,6 +143,10 @@ events_X_df = sgt.generate_events(
     event_defs=event_defs
 )
 
+print("Event counts by ID:")
+print(events_X_df['eID'].value_counts().sort_index())
+print(f"\nTotal events: {len(events_X_df)}")
+print("\nFirst few events:")
 print(events_X_df)
 
 #%% Store it

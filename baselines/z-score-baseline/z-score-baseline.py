@@ -387,7 +387,7 @@ if __name__ == '__main__':
             print("STEP 3: Detect Anomalies (Z-Score > 2.0) with Majority Voting (3/5)")
             print("="*80)
             
-            threshold_z = 1.5
+            threshold_z = 2
             detections, vote_counts, anomaly_indices = detect_anomalies(
                 z_data, 
                 threshold_z=threshold_z, 
