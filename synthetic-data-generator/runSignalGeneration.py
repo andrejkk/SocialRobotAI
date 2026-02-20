@@ -109,13 +109,13 @@ event_defs = {
     "eID_1": {
         "criteria": sgt.event_criteria_mean, # event trigger based on signal variability
         "sigs": ["sig_1"],
-        "params": {"thresh": 0.6}
+        "params": {"thresh": 0.54}
     },
     "eID_2": {
         "criteria": sgt.event_criteria_std,
         "sigs": ["sig_1"],
         #"params": {"thresh": 0.15}
-        "params": {"thresh": 0.18}
+        "params": {"thresh": 0.13}
     },
     "eID_3": {
         "criteria": sgt.event_criteria_fft_band,
