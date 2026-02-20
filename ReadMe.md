@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Social Robot AI
 
 ## General
@@ -31,7 +30,6 @@ Usage:
    `VITE_SUPABASE_URL`=""<br>
 
 2. Install libraries (requirements.txt), using pip or a virtual environment:
-
    1. python3 -m venv venv
    2. source venv/bin/activate
    3. (pip install --upgrade pip)
@@ -81,10 +79,8 @@ Pipeline:
 
 - Idea: Uses simple human-designed rules to infer activities based on sensor patterns, dominant room, and optionally time-of-day.
 - Mechanism:
-
   1.  Determine the room with the highest number of sensor activations in a window (dominant room).
   2.  Apply rules such as:
-
       - Bathroom → Toilet or Personal Hygiene
       - Bedroom → Sleep or Sleep_Out_Of_Bed (using hour if available)
       - Kitchen/Dining → Eat_Breakfast / Eat_Lunch
@@ -95,7 +91,7 @@ Pipeline:
 - Purpose: Provides an interpretable, non-ML benchmark that captures obvious spatial and temporal patterns.
 
 - Pros & Cons: Simple and explainable; outperforms majority-class baseline for activities with strong room/time associations, but misses rare or complex activities.
-=======
+
 # Social Robot AI
 
 ## General
@@ -128,7 +124,6 @@ Usage:
    `VITE_SUPABASE_URL`=""<br>
 
 2. Install libraries (requirements.txt), using pip or a virtual environment:
-
    1. python3 -m venv venv
    2. source venv/bin/activate
    3. (pip install --upgrade pip)
@@ -186,10 +181,8 @@ Pipeline:
 
 - Idea: Uses simple human-designed rules to infer activities based on sensor patterns, dominant room, and optionally time-of-day.
 - Mechanism:
-
   1.  Determine the room with the highest number of sensor activations in a window (dominant room).
   2.  Apply rules such as:
-
       - Bathroom → Toilet or Personal Hygiene
       - Bedroom → Sleep or Sleep_Out_Of_Bed (using hour if available)
       - Kitchen/Dining → Eat_Breakfast / Eat_Lunch
@@ -200,4 +193,3 @@ Pipeline:
 - Purpose: Provides an interpretable, non-ML benchmark that captures obvious spatial and temporal patterns.
 
 - Pros & Cons: Simple and explainable; outperforms majority-class baseline for activities with strong room/time associations, but misses rare or complex activities.
->>>>>>> 147120c7205025fae51455619dcd574be91d7f44
