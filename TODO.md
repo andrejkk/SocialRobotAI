@@ -10,5 +10,11 @@
 - docs for baseline, describe steps (15.2.)
 
 - SK learn algorithm for baseline
-- SVM algorithm (AK)
+- SVM baseline algorithm:
+  - implement simple version ✅
+  - try RBF kernel
+  - more frequent events
+  - more different events
+  - plot data classes if possible
+  - events at the same time, or different on different signals
 - find a public database with signals and labeled events and try the baselines and evaluate
