@@ -18,11 +18,13 @@ class ProcessFrames:
     def process_frames(self):
         df = DetectFace()
         cap = cv2.VideoCapture(self.video_path)
+        print("In process_frames: A")
         mp_drawing = mp.solutions.drawing_utils
         mp_pose = mp.solutions.pose
         pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
         trackers = []
         frameId = 0
+        print("In process_frames: B")
         while cap.isOpened():
             print(f"Processing frame {frameId}")
             ret, currentframe = cap.read()
@@ -68,7 +70,7 @@ class ProcessFrames:
 
 if __name__ == "__main__":
     patternpath = re.compile(r"Data\/66\d{3}\/\d{4}-\d{2}-\d{2}\/S\d+\/[^.]+\.webm$")
-    # video_dir = Path("Data")
+    video_dir = Path("Data")
     # test = "Data/66001/2023-11-01/S1/f565c08a-5fb8-41c5-9da7-e2a5dc1a6af8.webm"
     # print(patternpath)
     # print(bool(patternpath.match(test)))
@@ -76,19 +78,22 @@ if __name__ == "__main__":
     # videos = [
     #     f for f in video_dir.iterdir() if f.is_dir() and patternpath.match(f.name)
     # ]
-    videos = []
-    root = Path("Data")
+    #videos = []
+    root = Path("Data/")
     match_posix = [p for p in root.glob("**/*.webm") if patternpath.match(str(p))]
     video_string = [str(p) for p in match_posix]
-
+    #print('match_posix =', match_posix)
     # cap = cv2.VideoCapture(video_string[0])
 
     # print(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     # print(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    for video in video_string:
-        print(video)
+    
+    #for video in video_string:
+    #    print(video)
     pf = ProcessFrames(video_string[1])
+    #video_fn = "Data/66001/2025-12-11/S1/16ef52e7-8ae6-474c-8911-a6aec7bafe58.webm"
+    #pf = ProcessFrames(video_fn)
     pf.process_frames()
 
     # while cap.isOpened():
