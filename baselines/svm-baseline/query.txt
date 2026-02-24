@@ -1,0 +1,117 @@
+SVM notes:
+
+The baseline should be based on Support vector machine method. 
+Firstly explain how SVM (Support vector machine) would work on my example.
+
+A Support Vector Machine (SVM) tries to find a hyperplane that separates classes in feature space.
+Each time sample becomes a feature vector: x(t) = [sig1(t), sig2(t), sig3(t), sig4(t)],
+if we use time window(s): x(t) = [sig1(t - w), ..., sig4(t + w)]
+
+An SVM classifier does not depend on how frequently events occur in time.
+It depends on:
+- Number of labeled training samples per class
+- Class separability in feature space
+- Class balance
+
+What matters for SVM:
+SVM performs better when:
+- Each class has enough training examples
+- Classes are not extremely imbalanced
+- Features contain discriminative information
+
+Rule of thumb for SVM:
+- <10 samples per class = unstable boundary
+- 20–50 samples per class = minimally workable
+- 100+ per class = good baseline performance
+
+I need to implement a simple baseline algorithm for event detection. 
+I have a sythetic data generation script (runSignalGeneration.py) that generates data like this (events_X_df.xlsx - ground truth events, I have 5 different event types):
+time_s eID
+0 5 eID_5
+1 11 eID_4
+2 17 eID_4
+3 17 eID_5
+4 20 eID_4
+5 20 eID_5
+6 23 eID_2
+7 26 eID_2
+8 29 eID_2
+9 32 eID_4
+10 41 eID_1
+
+and sigs_X_df.xlsx:
+time_s sig_1 sig_2 sig_3 sig_4
+0 0 0.5 0 3 0
+1 0.05 0.5 0 3 0
+2 0.1 0.5 0 3 0
+3 0.15 0.5 0.0774637068107364 3 0
+4 0.2 0.5 -0.357344059048039 3.03247455945189 0
+5 0.25 0.38103053769003 -0.0170111553475925 2.87252837338119 0
+6 0.3 0.489777691329215 -0.218551033083447 2.71915916411765 0.00450377745814862
+7 0.35 0.447460024432591 -0.360492206107382 3.08512117137984 0.0287790408589647
+8 0.4 0.465292365013251 -0.206419427273495 2.8213958405467 -0.0468883469154297
+9 0.45 0.38270879814216 -0.185483477624685 3.09108316344841 0.0160805276537646
+10 0.5 0.519639938686303 -0.436594762608076 2.94190747090187 -0.0341485060062456
+11 0.55 0.535579097595494 -0.162270474483671 3.03853494966335 -0.0118573834442449
+
+
+Important: we will use SVM from sklearn: sklearn.svm.SVC, use SVC(class_weight="balanced")
+
+Step 1: Load data 
+- load data in a similar way to z-score-baseline.py baseline
+- read signals, read event types
+- Keep full signal timeline, Do NOT drop non-event rows
+
+Step 2 — Clean and Validate Time Alignment
+Since events cannot fall between samples:
+- Check that every event timestamp exists in sigs_df["time_s"]
+- If any mismatch appears, raise an error (not nearest match)
+
+Step 3: Create Label Vector
+Use a direct merge on time_s:
+Process:
+1. Initialize all signal rows with label = 0
+2. Merge event dataframe onto signal dataframe using time_s
+3. Replace labels where events exist
+4. Fill missing labels with 0
+
+Final dataframe structure:
+time_s
+sig_1 … sig_4
+label
+
+Step 4 – Feature Extraction
+Sliding window around each timestamp (e.g., ±2 samples = ±0.1 s at 20 Hz)
+
+Step 5 - Build X and y for sklearn
+From the processed dataframe:
+X: all signal columns (shape: N × 4)
+y: label column (shape: N)
+Do NOT filter only event rows
+Keep the full timeline (including no-event samples)
+
+Step 6:
+Without correction, the model will predict only “no event”. Use class weighting in SVM
+
+Step 7:
+Your signals have different magnitudes. SVM is highly sensitive to scale.
+Procedure:
+
+1. Fit scaler on training features only
+2. Transform training features
+3. Transform test features using same scaler
+Recommended scaler:
+StandardScaler (mean=0, std=1)
+
+Step 8: Train SVM (sklearn: sklearn.svm.SVC)
+Use SVM from sklearn
+Recommended baseline configuration:
+- Kernel: Linear kernel (simple baseline)
+- class_weight: "balanced"
+- decision_function_shape: "ovr" (default, fine for multiclass)
+
+Step 9: Evaluate
+Confusion matrix
+Precision/Recall per event type
+F1-score
+Detection latency (optional)
