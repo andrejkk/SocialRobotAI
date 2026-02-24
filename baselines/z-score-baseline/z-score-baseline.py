@@ -355,8 +355,9 @@ def compare_predictions(predicted_df, ground_truth_df, time_tolerance=0.5):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 2:
         signal_file = sys.argv[1]
+        events_file = sys.argv[2]
         VOTING_THRESHOLD = 2
         TIME_TOLERANCE = 1
         try:
@@ -424,14 +425,13 @@ if __name__ == '__main__':
             print(f"  Shape: {predicted_df.shape}")
             print(f"  Columns: {list(predicted_df.columns)}")
             
-            # Try to load ground truth
-            signal_file_path = Path(signal_file)
-            events_file = signal_file_path.parent / signal_file_path.name.replace('sigs_', 'events_')
+            # Load ground truth from provided file
+            events_file_path = Path(events_file)
             
-            if events_file.exists():
+            if events_file_path.exists():
                 ground_truth_df = load_ground_truth(events_file)
                 print(f"\n✓ Loaded ground truth events:")
-                print(f"  File: {events_file.name}")
+                print(f"  File: {events_file_path.name}")
                 print(f"  Total events: {len(ground_truth_df)}")
                 
                 # Compare predictions with ground truth
@@ -442,7 +442,7 @@ if __name__ == '__main__':
                 format_output(detections_filtered, output_file=output_file)
                 print(f"\n✓ Predictions saved to: {output_file}")
             else:
-                print(f"\n⚠ Ground truth file not found: {events_file.name}")
+                print(f"\n⚠ Ground truth file not found: {events_file_path}")
                 print(f"  Showing predicted events:")
                 print(predicted_df)
             
@@ -452,4 +452,4 @@ if __name__ == '__main__':
             traceback.print_exc()
             sys.exit(1)
     else:
-        print("Usage: python z-score-baseline.py <path_to_sigs_X_df.xlsx>")
+        print("Usage: python z-score-baseline.py <path_to_sigs_X_df.xlsx> <path_to_events_X_df.xlsx>")
