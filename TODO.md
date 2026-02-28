@@ -7,11 +7,11 @@
 
 - correct generation script to include end time also ✅
 - correct evaluation script to use time as TP, FP, FN ✅
-- refactor SVM algorithm to work with new data structure
+- refactor SVM algorithm to work with new data structure ✅
 - find a public database with signals and labeled events and try the baselines and evaluate
-- document and analyse SVM baseline
+- how are endtime calculated in generator? through a state transition detection approach with duration constraints ✅
 - Najeh article
-- how are endtime calculated in generator?
+- document and analyse SVM baseline
 
 - SVM baseline algorithm:
   - implement simple version ✅
