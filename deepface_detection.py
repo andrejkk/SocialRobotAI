@@ -5,17 +5,19 @@ interval = 5
 batch_size = 8
 # List[pd.DataFrame] = DeepFace.find(img_path = "img1.jpg", db_path = "C:/my_db")
 
+
 class DetectFace:
     def __init__(self):
         # self.frame = frame
         pass
 
-    print("smo prisli not")
+    print("Pri deepface smo prisli not")
     trackers = []
 
     def faceDetection(self, frame):
         try:
             faces = DeepFace.extract_faces(frame, detector_backend="opencv")
+
             multiple_bboxes = []
             if faces is not None:
                 # for f in faces:
@@ -26,6 +28,20 @@ class DetectFace:
                 for detected_face in faces:
                     # dostopaj do dobljenih koordinat iz detektiranga obraza izmed vseh detektiranih
                     fa = detected_face["facial_area"]
+
+                    print("Detected face keys:", detected_face.keys())
+
+                    face_cropped = detected_face["face"]
+
+                    emo_result = DeepFace.analyze(
+                        face_cropped, actions=["emotion"], enforce_detection=False
+                    )
+
+                    print("Detected emotions:", emo_result.get("emotion"))
+                    print("Dominant emotion:", emo_result.get("dominant_emotion"))
+                    # detected_emotion = detected_face["dominant_emotion"]
+                    # print(f"detected emotion: {detected_emotion}")
+
                     multiple_bboxes.append((fa["x"], fa["y"], fa["w"], fa["h"]))
                 return multiple_bboxes
 
