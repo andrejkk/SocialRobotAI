@@ -10,7 +10,6 @@ from pathlib import Path
 import sys
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import confusion_matrix, precision_recall_fscore_support, classification_report
 
 
 def load_signal_data(filepath):
@@ -48,7 +47,8 @@ def load_events_data(filepath):
     """
     STEP 1: Load event ground truth from Excel file.
     
-    Returns DataFrame with columns: time_s, eID
+    Returns DataFrame with columns: time_start, time_end, eID
+    Events are represented as intervals with start and end times.
     """
     filepath = Path(filepath)
     
@@ -60,7 +60,7 @@ def load_events_data(filepath):
     except Exception as e:
         raise ValueError(f"Failed to read Excel file {filepath}: {e}")
     
-    required_cols = ['time_s', 'eID']
+    required_cols = ['time_start', 'time_end', 'eID']
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
         raise ValueError(
@@ -69,7 +69,7 @@ def load_events_data(filepath):
         )
     
     result = df[required_cols].copy()
-    result = result.sort_values('time_s').reset_index(drop=True)
+    result = result.sort_values('time_start').reset_index(drop=True)
     
     return result
 
@@ -78,36 +78,45 @@ def validate_time_alignment(signals_df, events_df):
     """
     STEP 2: Clean and Validate Time Alignment
     
-    Ensures every event timestamp exists in signal data.
-    Raises error if any mismatch is found (no nearest-neighbor matching).
+    Ensures every event interval falls within signal data time range.
+    Checks that event start/end times are valid.
     
     Parameters
     ----------
     signals_df : pd.DataFrame
         Signal data with time_s column
     events_df : pd.DataFrame
-        Event data with time_s column
+        Event data with time_start, time_end columns
     
     Returns
     -------
     dict
         Validation report with status and details
     """
-    signal_times = set(signals_df['time_s'].values)
-    event_times = events_df['time_s'].values
+    signal_times = signals_df['time_s'].values
+    signal_min = signal_times.min()
+    signal_max = signal_times.max()
     
-    mismatches = []
+    issues = []
     
-    for event_time in event_times:
-        if event_time not in signal_times:
-            mismatches.append(event_time)
+    for idx, row in events_df.iterrows():
+        start = row['time_start']
+        end = row['time_end']
+        
+        # Check start < end
+        if start >= end:
+            issues.append(f"Event {idx}: time_start ({start}) >= time_end ({end})")
+        
+        # Check within signal range
+        if start < signal_min or end > signal_max:
+            issues.append(f"Event {idx}: interval [{start}, {end}] outside signal range [{signal_min}, {signal_max}]")
     
     validation_report = {
-        'status': 'PASS' if len(mismatches) == 0 else 'FAIL',
+        'status': 'PASS' if len(issues) == 0 else 'FAIL',
         'total_signal_samples': len(signals_df),
         'total_events': len(events_df),
-        'time_alignment_errors': len(mismatches),
-        'mismatched_times': mismatches
+        'alignment_issues': len(issues),
+        'issues': issues
     }
     
     return validation_report
@@ -117,22 +126,24 @@ def create_label_vector(signals_df, events_df):
     """
     STEP 3: Create Label Vector
     
-    Creates a labeled dataset by merging events with signals.
+    Creates a labeled dataset by mapping events (intervals) to signals.
+    Events are represented as time intervals [time_start, time_end].
+    All signal samples within an interval are labeled with that event's ID.
     Converts event IDs to numeric labels (1, 2, 3, ...).
     
     Process:
     1. Create mapping: event ID → numeric label (1, 2, 3, ...)
     2. Initialize all signal rows with label = 0 (no event)
-    3. Merge event dataframe onto signal dataframe using time_s
-    4. Replace labels where events exist with numeric labels
-    5. Fill missing labels with 0
+    3. For each signal sample, check if it falls within any event interval
+    4. Assign numeric label if sample is within an event interval
+    5. If sample is in multiple events, use the latest event in time
     
     Parameters
     ----------
     signals_df : pd.DataFrame
         Signal data with time_s, sig_1, sig_2, sig_3, sig_4
     events_df : pd.DataFrame
-        Event data with time_s, eID
+        Event data with time_start, time_end, eID columns
     
     Returns
     -------
@@ -153,26 +164,21 @@ def create_label_vector(signals_df, events_df):
     labeled_df = signals_df.copy()
     labeled_df['label'] = 0
     
-    # Round time_s to handle floating-point precision issues
-    labeled_df['time_s'] = labeled_df['time_s'].round(10)
-    
-    # Step 3: Merge with events dataframe on time_s
-    # Use left join to keep all signal samples
-    events_for_merge = events_df[['time_s', 'eID']].copy()
-    events_for_merge['time_s'] = events_for_merge['time_s'].round(10)
-    events_for_merge.columns = ['time_s', 'event_label']
-    
-    # Left merge: keep all rows from labeled_df, add event_label where available
-    labeled_df = labeled_df.merge(events_for_merge, on='time_s', how='left')
-    
-    # Step 4 & 5: Convert event IDs to numeric labels
-    # Where there's an event_label (not NaN), map it to numeric label; otherwise keep label=0
-    labeled_df['label'] = labeled_df['event_label'].apply(
-        lambda x: event_id_mapping[x] if pd.notna(x) else 0
-    )
-    
-    # Drop the temporary event_label column
-    labeled_df = labeled_df.drop(columns=['event_label'])
+    # Step 3-5: For each signal sample, check if it falls within any event interval
+    for idx, sig_row in labeled_df.iterrows():
+        time_s = sig_row['time_s']
+        
+        # Find all events that contain this time point
+        matching_events = events_df[
+            (events_df['time_start'] <= time_s) & (time_s <= events_df['time_end'])
+        ]
+        
+        if len(matching_events) > 0:
+            # If multiple events contain this time point, use the one with latest start time
+            # (arbitrary but consistent approach)
+            latest_event = matching_events.iloc[-1]
+            event_label = latest_event['eID']
+            labeled_df.at[idx, 'label'] = event_id_mapping[event_label]
     
     # Reorder columns for clarity
     labeled_df = labeled_df[['time_s', 'sig_1', 'sig_2', 'sig_3', 'sig_4', 'label']]
@@ -353,142 +359,125 @@ def train_svm_model(X_train_scaled, y_train, kernel='linear'):
     return model
 
 
-def evaluate_model(model, X_test_scaled, y_test, event_id_mapping, labeled_df, split_idx):
-    """
-    FINAL STEP: Model Evaluation - Confusion Matrix, Precision/Recall, F1-Score
-    
-    Comprehensive evaluation of the trained SVM model:
-    - Overall accuracy
-    - Confusion matrix
-    - Precision, Recall, F1-score per class
-    - Detailed classification report
-    
-    Parameters
-    ----------
-    model : SVC
-        Trained SVM model
-    X_test_scaled : np.ndarray
-        Scaled test feature matrix
-    y_test : np.ndarray
-        Test labels (ground truth)
-    event_id_mapping : dict
-        Mapping from event ID strings to numeric labels
-    labeled_df : pd.DataFrame
-        Original labeled dataframe (for latency analysis)
-    split_idx : int
-        Index where train/test split occurs
-    
-    Returns
-    -------
-    dict
-        Evaluation results containing predictions, metrics, and analysis
-    """
-    # Make predictions
-    y_pred = model.predict(X_test_scaled)
-    
-    # Compute overall accuracy
-    accuracy = np.mean(y_pred == y_test)
-    
-    # Compute confusion matrix
-    cm = confusion_matrix(y_test, y_pred)
-    
-    # Get all unique classes (from ground truth)
-    classes = np.unique(np.concatenate([y_test, y_pred]))
-    classes = np.sort(classes)
-    
-    # Compute precision, recall, F1 per class
-    precision, recall, f1, support = precision_recall_fscore_support(
-        y_test, y_pred, labels=classes, average=None, zero_division=0
-    )
-    
-    # Macro averages (equal weight to all classes)
-    macro_precision = np.mean(precision)
-    macro_recall = np.mean(recall)
-    macro_f1 = np.mean(f1)
-    
-    # Weighted averages (weighted by support/frequency)
-    weighted_precision = np.average(precision, weights=support)
-    weighted_recall = np.average(recall, weights=support)
-    weighted_f1 = np.average(f1, weights=support)
-    
-    evaluation_results = {
-        'y_pred': y_pred,
-        'y_test': y_test,
-        'accuracy': accuracy,
-        'confusion_matrix': cm,
-        'classes': classes,
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'support': support,
-        'macro_precision': macro_precision,
-        'macro_recall': macro_recall,
-        'macro_f1': macro_f1,
-        'weighted_precision': weighted_precision,
-        'weighted_recall': weighted_recall,
-        'weighted_f1': weighted_f1
-    }
-    
-    return evaluation_results
 
 
-def save_predictions_to_xlsx(y_pred, time_indices, labeled_df, split_idx, event_id_mapping, output_file='predicted_events_svm.xlsx'):
+def predictions_to_events(y_pred, labeled_df, split_idx, event_id_mapping, min_duration_s=1.0, max_duration_s=7.0, f_0=20):
     """
-    Save predicted events to Excel file in the same format as ground truth (events_X_df.xlsx).
+    Convert point-in-time predictions to event intervals (start/end times).
+    
+    Detects state transitions:
+    - 0 → non-zero = event starts
+    - non-zero → different label = previous event ends, new event starts
+    - non-zero → 0 = event ends
+    
+    Applies duration constraints:
+    - Events shorter than min_duration_s are filtered out
+    - Events longer than max_duration_s are capped
     
     Parameters
     ----------
     y_pred : np.ndarray
-        Predicted labels from the model
-    time_indices : np.ndarray or list
-        Indices in the test set
+        Predicted labels from SVM
     labeled_df : pd.DataFrame
         Original labeled dataframe with time_s column
     split_idx : int
         Index where train/test split occurs
     event_id_mapping : dict
         Mapping from event ID strings to numeric labels
-    output_file : str
-        Output Excel filename
+    min_duration_s : float
+        Minimum event duration in seconds (default: 1.0)
+    max_duration_s : float
+        Maximum event duration in seconds (default: 7.0)
+    f_0 : int
+        Sampling frequency in Hz (default: 20)
     
     Returns
     -------
     pd.DataFrame
-        DataFrame of predicted events saved to file
+        Events with columns: time_start, time_end, eID
     """
     # Create reverse mapping: numeric label -> event ID string
     reverse_mapping = {v: k for k, v in event_id_mapping.items()}
     
     # Get test set time values
-    test_time_values = labeled_df['time_s'].iloc[split_idx:].values
+    test_times = labeled_df['time_s'].iloc[split_idx:].values
     
-    # Filter predictions: only keep where y_pred != 0 (predicted events)
-    event_indices = np.where(y_pred != 0)[0]
+    events = []
+    current_label = 0
+    current_start_time = None
     
-    if len(event_indices) == 0:
-        # No events predicted
-        predicted_events_df = pd.DataFrame({'time_s': [], 'eID': []})
-    else:
-        # Get times and predicted labels for events
-        predicted_times = test_time_values[event_indices]
-        predicted_labels = y_pred[event_indices]
+    # Iterate through predictions with time values
+    for i, (pred_label, time) in enumerate(zip(y_pred, test_times)):
         
-        # Convert numeric labels back to event IDs
-        predicted_eids = [reverse_mapping[label] for label in predicted_labels]
+        # Transition: no event → event (start)
+        if current_label == 0 and pred_label != 0:
+            current_label = pred_label
+            current_start_time = time
         
-        # Create dataframe
-        predicted_events_df = pd.DataFrame({
-            'time_s': predicted_times,
-            'eID': predicted_eids
-        })
+        # Transition: event → different event (end previous, start new)
+        elif current_label != 0 and pred_label != current_label:
+            # End previous event
+            end_time = test_times[i - 1]
+            duration_s = end_time - current_start_time
+            
+            # Apply duration constraints
+            if duration_s >= min_duration_s:
+                # Cap at max duration
+                if duration_s > max_duration_s:
+                    end_time = current_start_time + max_duration_s
+                
+                events.append({
+                    'time_start': current_start_time,
+                    'time_end': end_time,
+                    'eID': reverse_mapping[current_label]
+                })
+            
+            # Start new event (if pred_label != 0)
+            if pred_label != 0:
+                current_label = pred_label
+                current_start_time = time
+            else:
+                current_label = 0
         
-        # Sort by time
-        predicted_events_df = predicted_events_df.sort_values('time_s').reset_index(drop=True)
+        # Transition: event → no event (end)
+        elif current_label != 0 and pred_label == 0:
+            end_time = test_times[i - 1]
+            duration_s = end_time - current_start_time
+            
+            # Apply duration constraints
+            if duration_s >= min_duration_s:
+                # Cap at max duration
+                if duration_s > max_duration_s:
+                    end_time = current_start_time + max_duration_s
+                
+                events.append({
+                    'time_start': current_start_time,
+                    'time_end': end_time,
+                    'eID': reverse_mapping[current_label]
+                })
+            
+            current_label = 0
+            current_start_time = None
     
-    # Save to Excel
-    predicted_events_df.to_excel(output_file, index=False)
+    # Handle event that extends to end of test set
+    if current_label != 0:
+        end_time = test_times[-1]
+        duration_s = end_time - current_start_time
+        
+        if duration_s >= min_duration_s:
+            # Cap at max duration
+            if duration_s > max_duration_s:
+                end_time = current_start_time + max_duration_s
+            
+            events.append({
+                'time_start': current_start_time,
+                'time_end': end_time,
+                'eID': reverse_mapping[current_label]
+            })
     
-    return predicted_events_df
+    result_df = pd.DataFrame(events) if events else pd.DataFrame(columns=['time_start', 'time_end', 'eID'])
+    
+    return result_df
 
 
 if __name__ == '__main__':
@@ -497,46 +486,22 @@ if __name__ == '__main__':
         events_file = sys.argv[2]
         
         try:
-            # STEP 1: Load Signal Data
-            print("="*80)
-            print("STEP 1: Load Signal Data")
-            print("="*80)
-            
             signals_df = load_signal_data(signal_file)
-            print(f"\n✓ Successfully loaded signal data:")
-        
-            
-            # STEP 1: Load Events Data
-            print("\n" + "="*80)
-            print("STEP 1: Load Event Ground Truth")
-            print("="*80)
-            
             events_df = load_events_data(events_file)
-            print(f"\n✓ Successfully loaded event data:")
-            
-            # STEP 2: Validate Time Alignment
-            print("\n" + "="*80)
-            print("STEP 2: Clean and Validate Time Alignment")
-            print("="*80)
             
             validation_report = validate_time_alignment(signals_df, events_df)
             
             if validation_report['status'] == 'FAIL':
-                print(f"\n✗ VALIDATION FAILED!")
-                print(f"  The following event timestamps do NOT exist in signal data:")
-                for mismatch_time in validation_report['mismatched_times']:
-                    print(f"    - time_s = {mismatch_time}")
+                
+                for issue in validation_report['issues']:
+                    print(f"    - {issue}")
                 raise ValueError(
                     f"Time alignment validation failed: "
-                    f"{len(validation_report['mismatched_times'])} event timestamps not found in signal data"
+                    f"{len(validation_report['issues'])} issues detected"
                 )
-            else:
-                print(f"\n✓ VALIDATION PASSED!")
-                print(f"  All event timestamps align with signal data.")
             
             # STEP 3: Create Label Vector
             print("\n" + "="*80)
-            print("STEP 3: Create Label Vector")
             print("="*80)
             
             labeled_df, event_id_mapping = create_label_vector(signals_df, events_df)
@@ -564,8 +529,9 @@ if __name__ == '__main__':
             
             # Show all rows with events (label != 0)
             event_rows = labeled_df[labeled_df['label'] != 0]
-            print(f"\n" + "-"*80)
-            print(f"ALL ROWS WITH EVENTS (label != 0):")
+            print(f"\n  Event coverage in dataset:")
+            print(f"    Total samples: {len(labeled_df)}")
+            print(f"    Samples with events: {len(event_rows)} ({len(event_rows)/len(labeled_df)*100:.2f}%)")
             
             # STEP 4: Feature Extraction with Sliding Window
             print("\n" + "="*80)
@@ -595,9 +561,9 @@ if __name__ == '__main__':
             print(f"  Training set: {X_train.shape[0]} samples")
             print(f"  Test set: {X_test.shape[0]} samples")
             
-            # STEP 8: Feature Scaling
+            # STEP 7: Feature Scaling
             print("\n" + "="*80)
-            print("STEP 8: Feature Scaling (StandardScaler)")
+            print("STEP 7: Feature Scaling (StandardScaler)")
             print("="*80)
             
             X_train_scaled, X_test_scaled, scaler = scale_features(X_train, X_test)
@@ -636,98 +602,38 @@ if __name__ == '__main__':
                     event_id = [k for k, v in event_id_mapping.items() if v == label][0]
                     print(f"    {label} ({event_id}): {count} samples")
             
-            # FINAL STEP: Model Evaluation
-            print("\n" + "="*80)
-            print("FINAL STEP: Model Evaluation")
-            print("="*80)
+            # Make predictions on test set
+            y_pred = model.predict(X_test_scaled)
             
-            results = evaluate_model(model, X_test_scaled, y_test, event_id_mapping, labeled_df, split_idx)
-            
-            print(f"\n✓ Model Evaluation Complete:")
-            print(f"  Overall Test Accuracy: {results['accuracy']:.4f}")
-            print(f"\n  Macro-averaged Metrics (equal weight to all classes):")
-            print(f"    Precision: {results['macro_precision']:.4f}")
-            print(f"    Recall:    {results['macro_recall']:.4f}")
-            print(f"    F1-Score:  {results['macro_f1']:.4f}")
-            print(f"\n  Weighted-averaged Metrics (weighted by class frequency):")
-            print(f"    Precision: {results['weighted_precision']:.4f}")
-            print(f"    Recall:    {results['weighted_recall']:.4f}")
-            print(f"    F1-Score:  {results['weighted_f1']:.4f}")
-            
-            # Per-class metrics
-            print(f"\n  Per-Class Metrics:")
-            print(f"  {'-'*75}")
-            print(f"  {'Class':<20} {'Precision':<15} {'Recall':<15} {'F1-Score':<15} {'Support':<10}")
-            print(f"  {'-'*75}")
-            
-            for idx, label in enumerate(results['classes']):
-                if label == 0:
-                    class_name = "No Event (0)"
-                else:
-                    event_id = [k for k, v in event_id_mapping.items() if v == label][0]
-                    class_name = f"{label} ({event_id})"
-                
-                print(f"  {class_name:<20} {results['precision'][idx]:<15.4f} {results['recall'][idx]:<15.4f} {results['f1'][idx]:<15.4f} {results['support'][idx]:<10}")
-            
-            # Confusion Matrix
-            print(f"\n  Confusion Matrix:")
-            print(f"  {'-'*75}")
-            print(f"  Rows: Ground Truth | Columns: Predictions")
-            print(f"  {'-'*75}")
-            
-            # Print header
-            header = "  GT \\ Pred"
-            for label in results['classes']:
-                if label == 0:
-                    header += f"{int(label):>10}"
-                else:
-                    header += f"{int(label):>10}"
-            print(header)
-            
-            # Print rows
-            for i, true_label in enumerate(results['classes']):
-                row = f"  {int(true_label):<10}"
-                for j in range(len(results['classes'])):
-                    row += f"{results['confusion_matrix'][i, j]:>10}"
-                print(row)
-            
-            # Summary stats
-            print(f"\n  Summary:")
-            print(f"    Total test samples: {len(y_test)}")
-            print(f"    Correct predictions: {(results['y_pred'] == results['y_test']).sum()}")
-            print(f"    Incorrect predictions: {(results['y_pred'] != results['y_test']).sum()}")
-            
-            # Save predicted events to xlsx file
-            print(f"\n" + "="*80)
-            print("SAVING PREDICTIONS TO EXCEL FILE")
-            print("="*80)
-            
-            output_filename = 'predicted_events_svm.xlsx'
-            predicted_events_df = save_predictions_to_xlsx(
-                results['y_pred'], 
-                np.arange(len(results['y_pred'])), 
-                labeled_df, 
-                split_idx, 
+            # Convert predictions to event intervals
+            min_duration_s = 1.0
+            max_duration_s = 7.0
+            f_0 = 20
+            predicted_events_df = predictions_to_events(
+                y_pred,
+                labeled_df,
+                split_idx,
                 event_id_mapping,
-                output_file=output_filename
+                min_duration_s=min_duration_s,
+                max_duration_s=max_duration_s,
+                f_0=f_0
             )
             
-            print(f"\n✓ Successfully saved predictions to: {output_filename}")
-            print(f"  Total predicted events: {len(predicted_events_df)}")
+            # Debug output
+            print(f"\nDEBUG INFO:")
+            print(f"  Total predictions: {len(y_pred)}")
+            print(f"  Unique predicted labels: {np.unique(y_pred)}")
+            print(f"  Prediction distribution:")
+            for label in sorted(np.unique(y_pred)):
+                count = (y_pred == label).sum()
+                pct = count / len(y_pred) * 100
+                print(f"    Label {label}: {count} samples ({pct:.1f}%)")
+            print(f"  Events detected: {len(predicted_events_df)}")
             
-            if len(predicted_events_df) > 0:
-                print(f"\n  First 10 predicted events:")
-                print(predicted_events_df.head(10).to_string(index=False))
-                
-                if len(predicted_events_df) > 10:
-                    print(f"\n  Last 5 predicted events:")
-                    print(predicted_events_df.tail(5).to_string(index=False))
-            else:
-                print(f"  No events predicted in test set")
+            output_filename = 'predicted_events_svm.xlsx'
+            predicted_events_df.to_excel(output_filename, index=True)
             
-            print("\n" + "="*80)
-            print("ALL STEPS COMPLETED SUCCESSFULLY")
-            print("="*80)
+            print(f"\nPredicted events saved to: {output_filename}")
         except Exception as e:
             print(f"\n✗ Error: {e}", file=sys.stderr)
             import traceback

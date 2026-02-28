@@ -55,13 +55,15 @@ def perturb_events(events_df, time_deviation_std=0.5, event_misalignment_prob=0.
     return perturbed
 
 
-def evaluate_events(gt_df, pred_df):
+def evaluate_events(gt_df, pred_df, eval_start_time=None):
     """
     Evaluate event detection performance using temporal overlap metrics.
     
     Parameters:
     - gt_df: Ground truth DataFrame with 'time_start', 'time_end', and 'eID' columns
     - pred_df: Predicted events DataFrame with 'time_start', 'time_end', and 'eID' columns
+    - eval_start_time: Optional start time for evaluation (e.g., train/test split point)
+                      If provided, only events with time_start >= eval_start_time are evaluated
     
     Returns:
     - Dictionary with TP, FP, FN (in seconds) and precision, recall, F1-score
@@ -71,6 +73,14 @@ def evaluate_events(gt_df, pred_df):
     - FP (False Positive): Predicted time outside GT boundaries (seconds)
     - FN (False Negative): GT time not covered by prediction (seconds)
     """
+    # Filter events by eval_start_time if provided
+    if eval_start_time is not None:
+        gt_df = gt_df[gt_df['time_start'] >= eval_start_time].reset_index(drop=True)
+        pred_df = pred_df[pred_df['time_start'] >= eval_start_time].reset_index(drop=True)
+        print(f"\nFiltering events by eval_start_time: {eval_start_time}s")
+        print(f"  GT events after filtering: {len(gt_df)}")
+        print(f"  Predicted events after filtering: {len(pred_df)}")
+    
     total_tp = 0.0
     total_fp = 0.0
     total_fn = 0.0
@@ -299,6 +309,7 @@ if __name__ == "__main__":
     parser.add_argument('--time-deviation', type=float, default=0.5, help='Std dev of time deviations for generated predictions (seconds, default: 0.5)')
     parser.add_argument('--misalignment-prob', type=float, default=0.1, help='Probability of event misalignment in generated predictions (0-1, default: 0.1)')
     parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducible perturbations (default: None)')
+    parser.add_argument('--eval-start-time', type=float, default=None, help='Start time for evaluation in seconds (e.g., train/test split point). If not provided, uses min time_start from predictions (default: None)')
     
     args = parser.parse_args()
     
@@ -339,13 +350,19 @@ if __name__ == "__main__":
             seed=args.seed
         )
 
-    print(f"Total predicted events: {len(pred_events_df)}\n")
+    print(f"Total predicted events: {len(pred_events_df)}")
+    
+    # Determine evaluation start time
+    eval_start_time = args.eval_start_time
+    if eval_start_time is None and len(pred_events_df) > 0:
+        eval_start_time = pred_events_df['time_start'].min()
+        print(f"No --eval-start-time specified. Using min time_start from predictions: {eval_start_time}s\n")
     
     # Evaluate predicted events against ground truth
     print("=" * 60)
     print("Evaluation: Ground Truth vs. Predicted Events (Temporal Overlap)")
     print("=" * 60)
-    result = evaluate_events(gt_events_df, pred_events_df)
+    result = evaluate_events(gt_events_df, pred_events_df, eval_start_time=eval_start_time)
     print(f"True Positive (TP):  {result['tp']:.4f} seconds")
     print(f"False Positive (FP): {result['fp']:.4f} seconds")
     print(f"False Negative (FN): {result['fn']:.4f} seconds")
