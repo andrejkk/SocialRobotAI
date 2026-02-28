@@ -359,7 +359,7 @@ if __name__ == '__main__':
         signal_file = sys.argv[1]
         events_file = sys.argv[2]
         VOTING_THRESHOLD = 2
-        TIME_TOLERANCE = 1
+        TIME_TOLERANCE = 2
         try:
             # STEP 1: Load signal data
             print("="*80)

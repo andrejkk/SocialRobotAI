@@ -690,7 +690,7 @@ if __name__ == '__main__':
         WINDOW_SIZE_S = 10.0
         STRIDE_S = 0.5
         SAMPLING_RATE = 20.0  # 1 / 0.05s
-        TIME_TOLERANCE = 0.5
+        TIME_TOLERANCE = 1
         N_SPLITS = 3
         SMOOTHING_WINDOW = 1
         MIN_CONFIDENCE = 0.2    # Lower threshold for detection

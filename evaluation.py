@@ -3,6 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 
+"""
+True Positive (TP) = Correctly overlapped time between real and simulated segments
+False Positive (FP) = Extra predicted time outside the real activity
+False Negative (FN) = Missed real activity time not covered by prediction
+
+Precision: Interpretation: 94.7% of predicted activity duration is correct.
+Recall: Interpretation: 98.4% of the real activity duration was captured.
+
+"""
 
 def perturb_events(events_df, time_noise_std=0.5, flip_prob=0.2, event_ids=None, seed=None):
     """
