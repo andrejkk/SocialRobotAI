@@ -18,14 +18,17 @@ class ProcessFrames:
     def process_frames(self):
         df = DetectFace()
         cap = cv2.VideoCapture(self.video_path)
-        print("In process_frames: A")
+
         mp_drawing = mp.solutions.drawing_utils
         mp_pose = mp.solutions.pose
         pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
         trackers = []
+
         frameId = 0
-        print("In process_frames: B")
+        # frames = self.video_path.get(cv2.CAP_PROP_FRAME_COUNT)
+
         while cap.isOpened():
+            # print(f"Processing frame {frameId} out of frames = {frames}")
             print(f"Processing frame {frameId}")
             ret, currentframe = cap.read()
             if not ret:
@@ -58,43 +61,52 @@ class ProcessFrames:
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 cap.release()
-                # out.release()
                 cv2.destroyAllWindows()
 
             frameId += 1
-            # if frameId >= 100:
-            #     break
-            # else:
-            #     continue
 
 
 if __name__ == "__main__":
-    patternpath = re.compile(r"Data\/66\d{3}\/\d{4}-\d{2}-\d{2}\/S\d+\/[^.]+\.webm$")
-    video_dir = Path("Data")
     # test = "Data/66001/2023-11-01/S1/f565c08a-5fb8-41c5-9da7-e2a5dc1a6af8.webm"
-    # print(patternpath)
-    # print(bool(patternpath.match(test)))
+    ############ FIND VIDEO FILES ############
+    video_files = []
+    for root, dirs, files in os.walk("Data"):
+        for file in files:
+            if os.path.isfile(os.path.join(root, file)) and file.lower().endswith(
+                ".webm"
+            ):
+                video_files.append(os.path.join(root, file))
 
-    # videos = [
-    #     f for f in video_dir.iterdir() if f.is_dir() and patternpath.match(f.name)
-    # ]
-    #videos = []
-    root = Path("Data/")
-    match_posix = [p for p in root.glob("**/*.webm") if patternpath.match(str(p))]
-    video_string = [str(p) for p in match_posix]
-    #print('match_posix =', match_posix)
+    ### deprecated regex pattern, ne dela na Windowsu ker glob vrne POSIXPath, ki ima naprej poševnice
+    # patternpath = re.compile(r"Data\/66\d{3}\/\d{4}-\d{2}-\d{2}\/S\d+\/[^.]+\.webm$")
+    # video_dir = Path("Data")
+
+    # # print(patternpath)
+    # # print(bool(patternpath.match(test)))
+
+    # # videos = [
+    # #     f for f in video_dir.iterdir() if f.is_dir() and patternpath.match(f.name)
+    # # ]
+    # # videos = []
+    # root = Path("Data/")
+    # match_posix = [p for p in root.glob("**/*.webm") if patternpath.match(str(p))]
+    # video_string = [str(p) for p in match_posix]
+    # print('match_posix =', match_posix)
     # cap = cv2.VideoCapture(video_string[0])
 
     # print(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     # print(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    
-    #for video in video_string:
+    # for video in video_string:
     #    print(video)
-    pf = ProcessFrames(video_string[1])
-    #video_fn = "Data/66001/2025-12-11/S1/16ef52e7-8ae6-474c-8911-a6aec7bafe58.webm"
-    #pf = ProcessFrames(video_fn)
-    pf.process_frames()
+    ###############################################################
+    ### walk through all found videos and process their frames
+    for video in video_files:
+        pf = ProcessFrames(video)
+        pf.process_frames()
+
+    # pf = ProcessFrames(video_files[0])
+    # pf.process_frames()
 
     # while cap.isOpened():
 
