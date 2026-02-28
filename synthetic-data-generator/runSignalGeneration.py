@@ -84,7 +84,9 @@ events_X_df = sgt.generate_events(
     f_0=20, 
     window_s=5, 
     hop_len_s=5, 
-    event_defs=event_defs
+    event_defs=event_defs,
+    min_duration_s=1.0,
+    max_duration_s=7.0
 )
 
 print(events_X_df)
@@ -140,7 +142,9 @@ events_X_df = sgt.generate_events(
     f_0=20,
     window_s=5,
     hop_len_s=3,
-    event_defs=event_defs
+    event_defs=event_defs,
+    min_duration_s=1.0,
+    max_duration_s=7.0
 )
 
 print("Event counts by ID:")
