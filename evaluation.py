@@ -13,6 +13,69 @@ Recall: Interpretation: 98.4% of the real activity duration was captured.
 
 """
 
+# Hardcoded threshold for time gap between events of same ID to count as separate intervals
+TIME_GAP_THRESHOLD_S = 1.0  # seconds
+
+
+def convert_pointwise_to_interval_events(events_df, time_gap_threshold=TIME_GAP_THRESHOLD_S):
+    """
+    Convert pointwise event data (time_s, eID) to interval events (time_start, time_end, eID).
+    Groups consecutive rows with the same eID into event intervals.
+    If time gap between consecutive rows of same eID exceeds threshold, they are separate intervals.
+    
+    Parameters:
+    - events_df: DataFrame with 'time_s' and 'eID' columns (pointwise events)
+    - time_gap_threshold: Maximum time gap (seconds) to group consecutive events of same ID (default: 1.0)
+    
+    Returns:
+    - DataFrame with 'time_start', 'time_end', 'eID' columns (interval events)
+    """
+    if 'time_s' not in events_df.columns or 'eID' not in events_df.columns:
+        raise ValueError("Input DataFrame must have 'time_s' and 'eID' columns")
+    
+    # Ensure events are sorted by eID and time_s
+    events_df = events_df.sort_values(['eID', 'time_s']).reset_index(drop=True)
+    
+    intervals = []
+    
+    # Group by eID
+    for eid, group in events_df.groupby('eID'):
+        times = group['time_s'].values
+        
+        # Initialize the first interval
+        interval_start = times[0]
+        interval_end = times[0]
+        
+        # Process each time point
+        for i in range(1, len(times)):
+            time_gap = times[i] - times[i-1]
+            
+            if time_gap > time_gap_threshold:
+                # Gap is too large - save current interval and start a new one
+                intervals.append({
+                    'time_start': interval_start,
+                    'time_end': interval_end,
+                    'eID': eid
+                })
+                interval_start = times[i]
+                interval_end = times[i]
+            else:
+                # Gap is small - extend the current interval
+                interval_end = times[i]
+        
+        # Save the last interval
+        intervals.append({
+            'time_start': interval_start,
+            'time_end': interval_end,
+            'eID': eid
+        })
+    
+    # Sort intervals by time_start (lowest to highest)
+    result_df = pd.DataFrame(intervals)
+    result_df = result_df.sort_values('time_start').reset_index(drop=True)
+    return result_df
+
+
 def perturb_events(events_df, time_deviation_std=0.5, event_misalignment_prob=0.1, seed=None):
     """
     Generate predicted events from ground truth by adding perturbations.
@@ -75,8 +138,8 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None):
     """
     # Filter events by eval_start_time if provided
     if eval_start_time is not None:
-        gt_df = gt_df[gt_df['time_start'] >= eval_start_time].reset_index(drop=True)
-        pred_df = pred_df[pred_df['time_start'] >= eval_start_time].reset_index(drop=True)
+        gt_df = gt_df[gt_df['time_end'] >= eval_start_time].reset_index(drop=True)
+        pred_df = pred_df[pred_df['time_end'] >= eval_start_time].reset_index(drop=True)
         print(f"\nFiltering events by eval_start_time: {eval_start_time}s")
         print(f"  GT events after filtering: {len(gt_df)}")
         print(f"  Predicted events after filtering: {len(pred_df)}")
@@ -91,10 +154,13 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None):
         gt_events = gt_df[gt_df['eID'] == eid].reset_index(drop=True)
         pred_events = pred_df[pred_df['eID'] == eid].reset_index(drop=True)
         
+        print(f"\n--- Processing eID: {eid} ---")
+        print(f"  GT events: {len(gt_events)}, Predicted events: {len(pred_events)}")
+        
         # For each GT event, find the best matching predicted event
         used_pred = set()
         
-        for _, gt_event in gt_events.iterrows():
+        for gt_idx, gt_event in gt_events.iterrows():
             gt_start = gt_event['time_start']
             gt_end = gt_event['time_end']
             
@@ -124,18 +190,27 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None):
                 # Calculate metrics for this pair
                 overlap_start = max(gt_start, pred_start)
                 overlap_end = min(gt_end, pred_end)
-                tp = max(0, overlap_end - overlap_start)
-                
+
+                gt_duration = gt_end - gt_start
+                pred_duration = pred_end - pred_start
+
+                tp = max(0.0, overlap_end - overlap_start)
+
                 # FP: predicted time outside GT
-                fp = max(0, gt_start - pred_start) + max(0, pred_end - gt_end)
+                fp = max(0.0, pred_duration - tp)
                 
                 # FN: GT time not covered by predicted
-                fn = max(0, pred_start - gt_start) + max(0, gt_end - pred_end)
+                fn = max(0.0, gt_duration - tp)
                 
                 # Calculate per-pair metrics
                 pair_precision = tp / (tp + fp) if (tp + fp) > 0 else 0
                 pair_recall = tp / (tp + fn) if (tp + fn) > 0 else 0
                 pair_f1 = 2 * pair_precision * pair_recall / (pair_precision + pair_recall) if (pair_precision + pair_recall) > 0 else 0
+                
+                print(f"  Match found for GT interval [{gt_start:.2f}-{gt_end:.2f}]s")
+                print(f"    Pred interval: [{pred_start:.2f}-{pred_end:.2f}]s")
+                print(f"    TP: {tp:.4f}s, FP: {fp:.4f}s, FN: {fn:.4f}s")
+                print(f"    Precision: {pair_precision:.4f}, Recall: {pair_recall:.4f}, F1: {pair_f1:.4f}")
                 
                 # Store comparison
                 comparisons.append({
@@ -158,12 +233,16 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None):
                 used_pred.add(best_pred_idx)
             else:
                 # GT event not matched - entire GT duration is false negative
-                total_fn += gt_end - gt_start
+                fn_unmatched = gt_end - gt_start
+                print(f"  NO match for GT interval [{gt_start:.2f}-{gt_end:.2f}]s - All FN: {fn_unmatched:.4f}s")
+                total_fn += fn_unmatched
         
         # Unmatched predicted events contribute to FP
         for pred_idx, pred_event in pred_events.iterrows():
             if pred_idx not in used_pred:
-                total_fp += pred_event['time_end'] - pred_event['time_start']
+                fp_unmatched = pred_event['time_end'] - pred_event['time_start']
+                print(f"  Unmatched predicted interval [{pred_event['time_start']:.2f}-{pred_event['time_end']:.2f}]s - All FP: {fp_unmatched:.4f}s")
+                total_fp += fp_unmatched
     
     # Calculate precision, recall, F1
     precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
@@ -333,11 +412,19 @@ if __name__ == "__main__":
     # Load ground truth events
     print(f"Loading ground truth events from: {args.gt_file}")
     gt_events_df = pd.read_excel(args.gt_file)
+    gt_pointwise_count = len(gt_events_df)
+    print("Converting pointwise event format to interval format...")
+    gt_events_df = convert_pointwise_to_interval_events(gt_events_df)
+    print(f"  Converted {gt_pointwise_count} pointwise events to {len(gt_events_df)} interval events")
     
     # Load or generate predicted events
     if args.pred_file:
         print(f"Loading predicted events from: {args.pred_file}")
         pred_events_df = pd.read_excel(args.pred_file)
+        pred_pointwise_count = len(pred_events_df)
+        print("Converting pointwise event format to interval format...")
+        pred_events_df = convert_pointwise_to_interval_events(pred_events_df)
+        print(f"  Converted {pred_pointwise_count} pointwise events to {len(pred_events_df)} interval events")
     else:
         print("No predicted events file provided. Generating predicted events from ground truth with perturbations...")
         print(f"  - Time deviation (std): {args.time_deviation} seconds")
