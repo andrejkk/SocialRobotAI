@@ -8,6 +8,23 @@ from deepface_detection import DetectFace
 
 """
 STREAMING PIPELINE
+
+TODO ***do 13. marca***:
+1. emotional annotation iz deepface.analyze [ ]
+2. daj pose estimation v posebaj file da se klice kot razred, razreši ga na windowsu [ ]
+3. implementiraj trackerje preko bounding boxov, threadaj jih? [ ]
+4. najti javno dostopne video posnetke z označenimi dogodki, da se lahko testira na realnih podatkih [ ] 
+(poglej WESAD, AffectiveROAD, RECOLA, SEMAINE, DEAP, AMIGOS, HCI Tagging Database)
+
+--3. marec--
+
+Na kratko:
+- sedaj potrebujemo ekstrahirane časovne vrste, da gredo v obdelavo. WESAD in podobnih baz ne potrebujeva
+- predlagam, da poiščete po javno dostopih podatkovnih bazah označenih videov, za katere so dogodki znani in bo to eden od podatkovnih množic v mag. 
+Gre za video posnetke, na katerih so osebe v interakciji z nekim isstemom in so označeni dogodki.
+- struktura dokumenta: za to potrebujeva sestanek, da zastaviva poglavja in okvir vsebine - na daljavo z deljejnem zaslona
+-----------
+
 """
 
 
@@ -43,9 +60,29 @@ class ProcessFrames:
                 # ignoriraj prazne rezulte, pojdi na naslednji okvir
                 continue
 
-            for x, y, w, h in detected_boxes:
+            for x, y, w, h, emotion in detected_boxes:
                 cv2.rectangle(currentframe, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(
+                    currentframe,
+                    emotion,
+                    (x + w, (y + 10) + h),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    2,
+                )
 
+                # pokaži pridobljeno cropped sliko
+                # cropped = currentframe[y : y + h, x : x + w]
+                # cv2.imshow("Cropped Face", cropped)
+
+            ## init a tracker on retrieved bbox, true if succesful on the bb for target person
+            # cv.Tracker.init(	image, boundingBox	)
+
+            # updateat tracker da najde nov most likely bb od targeta
+            # cv.Tracker.update(	image	)
+
+            # tracker = cv2.TrackerCSRT_create()
             # else:
             #     for tracker in trackers:
             #         success, bbox = tracker.update(currentframe)
@@ -56,8 +93,7 @@ class ProcessFrames:
             mp_drawing.draw_landmarks(
                 currentframe, results_pose.pose_landmarks, mp_pose.POSE_CONNECTIONS
             )
-            cv2.imshow("Output", currentframe)
-            # cv2.imshow("Video", currentframe)
+            cv2.imshow("Video", currentframe)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 cap.release()
