@@ -1,9 +1,14 @@
 from deepface import DeepFace
 import cv2
 
+import os
+from pathlib import Path
+import matplotlib.pyplot as plt
+
 interval = 5
 batch_size = 8
 # List[pd.DataFrame] = DeepFace.find(img_path = "img1.jpg", db_path = "C:/my_db")
+"""DEEP FACE MODULE"""
 
 
 class DetectFace:
@@ -11,13 +16,39 @@ class DetectFace:
         # self.frame = frame
         pass
 
-    print("Pri deepface smo prisli not")
+    # print("Pri deepface smo prisli not")
     trackers = []
 
+    def annotateEmotion(self, imagecrop):
+        try:
+            emo_result = DeepFace.analyze(
+                imagecrop, actions=["emotion"], enforce_detection=False
+            )
+            # dominant_emotion = emo_result.get("emotion").get("dominant_emotion") get dela samo na seznamih!
+            # jaz imam dict čeprav je hierarhija dicta shranjena v seznamu
+            # dom_emo = emo_result["emotion"][0]
+            # dom_emo = emo_result["dominant_emotion"]
+            print(f"Detected dominant emotion: {emo_result}")
+            detected_emotions = emo_result[0]
+            dom_emo = detected_emotions["dominant_emotion"]
+            # print("Detected emotions: ", emo_result, "are type of: ", type(emo_result))
+            # print("Detected emotions:", emo_result.get("emotion"))
+            # print("Dominant emotion:", emo_result.get("dominant_emotion"))
+            return dom_emo
+        except Exception as e:
+            print(f"Napaka pri detekciji emocije: {e}")
+            return None
+
     def faceDetection(self, frame):
+        # out_dir = Path("cropped_faces")
+        # if not out_dir.exists():
+        #     out_dir.mkdir(parents=True, exist_ok=True)
+        # else:
+        #     pass
+
         try:
             faces = DeepFace.extract_faces(frame, detector_backend="opencv")
-
+            print("Detected faces keys:", faces[0].keys() if faces else "None")
             multiple_bboxes = []
             if faces is not None:
                 # for f in faces:
@@ -25,24 +56,58 @@ class DetectFace:
                 #     print(f"Found facial area: {fa}")
                 #     x, y, w, h = fa["x"], fa["y"], fa["w"], fa["h"]
                 #     # return x, y, w, h
+                i = 0
                 for detected_face in faces:
                     # dostopaj do dobljenih koordinat iz detektiranga obraza izmed vseh detektiranih
-                    fa = detected_face["facial_area"]
+                    facial_area = detected_face["facial_area"]
 
-                    print("Detected face keys:", detected_face.keys())
+                    # print("Detected face keys:", detected_face.keys())
 
-                    face_cropped = detected_face["face"]
-
-                    emo_result = DeepFace.analyze(
-                        face_cropped, actions=["emotion"], enforce_detection=False
-                    )
-
-                    print("Detected emotions:", emo_result.get("emotion"))
-                    print("Dominant emotion:", emo_result.get("dominant_emotion"))
+                    iidface_cropped = detected_face["face"]
+                    # print("A: Detected emotions:", emo_result.get("emotion"))
+                    # print("B: Dominant emotion:", emo_result.get("dominant_emotion"))
                     # detected_emotion = detected_face["dominant_emotion"]
                     # print(f"detected emotion: {detected_emotion}")
 
-                    multiple_bboxes.append((fa["x"], fa["y"], fa["w"], fa["h"]))
+                    # shranimo koordinate za trenutni face kje je bil detektiran obraz (ocrtan okvir)
+                    x, y, w, h = (
+                        facial_area["x"],
+                        facial_area["y"],
+                        facial_area["w"],
+                        facial_area["h"],
+                    )
+                    cropped_face = frame[y : y + h, x : x + w]
+                    detected_emotion = self.annotateEmotion(cropped_face)
+                    if detected_emotion is not None:
+                        print(
+                            f"Detected emotion for face at ({x}, {y}, {w}, {h}): {detected_emotion}"
+                        )
+                        # cv2.putText()
+
+                    # if i == 0:
+                    #     cropped_face = frame[y : y + h, x : x + w]
+                    #     plt.figure(figsize=(6, 4))
+                    #     plt.plot(cropped_face)
+
+                    #     filename = out_dir / f"frame_{frame:03d}.png"
+                    #     plt.savefig(filename)
+                    #     plt.imshow(cropped_face)
+                    #     plt.close()  # important to free memory
+                    #     print(f"Saved {filename}")
+                    #     i = 1
+                    # else:
+                    #     pass
+
+                    multiple_bboxes.append(
+                        (
+                            facial_area["x"],
+                            facial_area["y"],
+                            facial_area["w"],
+                            facial_area["h"],
+                            detected_emotion,
+                        )
+                    )
+                    # returnam tudi none vrednost? kaj pa če imam tu if?
                 return multiple_bboxes
 
                 ##### tale dela sama po seb za en obraz #####
