@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from scipy import signal, stats
 
 
+
 def ar_from_timescale(tau_s, f_0, p):
     """
     Generate stable AR(p) coefficients with decay time ~tau_s
@@ -116,95 +117,27 @@ def generate_events(
     sigs_X_df,
     f_0,
     window_s=5,
-    hop_len_s=2,
-    event_defs=None,
-    min_duration_s=1.0,
-    max_duration_s=7.0
+    event_defs=None
 ):
     """
-    Generate events with start and end times.
-    
-    Parameters:
-    - sigs_X_df: DataFrame with time_s column and signal columns
-    - f_0: sampling frequency (Hz)
-    - window_s: window length for criteria evaluation (seconds)
-    - hop_len_s: hop length for checking criteria (seconds)
-    - event_defs: dict of eID -> dict(criteria, sigs, params)
-    - min_duration_s: minimum event duration (seconds)
-    - max_duration_s: maximum event duration (seconds)
-    
-    Returns: DataFrame with columns [time_start, time_end, eID]
+    event_defs = dict of:
+    eID -> dict(criteria_fn, sigs, params)
     """
     events = []
     win = int(window_s * f_0)
-    hop = int(hop_len_s * f_0)
-    min_samples = int(min_duration_s * f_0)
-    max_samples = int(max_duration_s * f_0)
-    
-    active_events = {}  # Track ongoing events: eID -> {start_idx, start_time}
-    
-    for t_idx in range(win, len(sigs_X_df), hop):
+
+    for t_idx in range(win, len(sigs_X_df)):
         t = sigs_X_df.loc[t_idx, "time_s"]
-        
+
         for eID, edef in event_defs.items():
             sig_data = [
                 sigs_X_df.loc[t_idx-win:t_idx, s].values
                 for s in edef["sigs"]
             ]
-            criteria_met = edef["criteria"](*sig_data, **edef["params"])
-            
-            if criteria_met and eID not in active_events:
-                # Event starts
-                active_events[eID] = {"start_idx": t_idx, "start_time": t}
-                
-            elif not criteria_met and eID in active_events:
-                # Event ends
-                event_data = active_events.pop(eID)
-                start_idx = event_data["start_idx"]
-                start_time = event_data["start_time"]
-                duration_idx = t_idx - start_idx
-                end_idx = t_idx
-                
-                # Enforce minimum duration
-                if duration_idx < min_samples:
-                    end_idx = min(start_idx + min_samples, len(sigs_X_df) - 1)
-                
-                # Enforce maximum duration
-                if duration_idx > max_samples:
-                    end_idx = start_idx + max_samples
-                
-                end_time = sigs_X_df.loc[end_idx, "time_s"]
-                events.append({
-                    "time_start": start_time,
-                    "time_end": end_time,
-                    "eID": eID
-                })
-    
-    # Close any remaining active events at the end of data
-    end_time = sigs_X_df.loc[len(sigs_X_df) - 1, "time_s"]
-    for eID, event_data in active_events.items():
-        start_idx = event_data["start_idx"]
-        start_time = event_data["start_time"]
-        duration_idx = len(sigs_X_df) - 1 - start_idx
-        
-        # Enforce minimum duration
-        if duration_idx < min_samples:
-            end_idx = min(start_idx + min_samples, len(sigs_X_df) - 1)
-            end_time = sigs_X_df.loc[end_idx, "time_s"]
-        else:
-            end_time = end_time
-        
-        # Enforce maximum duration
-        if duration_idx > max_samples:
-            end_idx = start_idx + max_samples
-            end_time = sigs_X_df.loc[end_idx, "time_s"]
-        
-        events.append({
-            "time_start": start_time,
-            "time_end": end_time,
-            "eID": eID
-        })
-    
+
+            if edef["criteria"](*sig_data, **edef["params"]):
+                events.append({"time_s": t, "eID": eID})
+
     return pd.DataFrame(events)
 
 
@@ -215,18 +148,8 @@ def plot_sigs(
     events_X_df,
     t_int,
     sigs_lst,
-    events_lst=None,
-    event_defs=None
+    events_lst=None
 ):
-    # Define colors for each event ID
-    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
-    # Use all event IDs from events_lst (if provided), else from events_X_df
-    if events_lst is not None:
-        unique_eids = list(events_lst)
-    else:
-        unique_eids = list(events_X_df['eID'].unique())
-    event_colors = {eid: colors[i % len(colors)] for i, eid in enumerate(unique_eids)}
-    
     fig, ax = plt.subplots(len(sigs_lst), 1, figsize=(12, 2.5 * len(sigs_lst)), sharex=True)
 
     if len(sigs_lst) == 1:
@@ -239,37 +162,97 @@ def plot_sigs(
         ]
         ax[i].plot(df.time_s, df[sig], label=sig)
         ax[i].set_ylabel(sig)
-        
-        label_added = set()
-
-        if events_lst and event_defs:
-            # Only plot events that are defined for this signal
-            for event_id in events_lst:
-                if event_id in event_defs:
-                    event_sigs = event_defs[event_id]["sigs"]
-                    # Check if current signal is in this event's signal list
-                    if sig in event_sigs:
-                        color = event_colors[event_id]
-                        for _, ev in events_X_df[events_X_df.eID == event_id].iterrows():
-                            # Check if event interval overlaps with time window
-                            if t_int[0] <= ev.time_end and ev.time_start <= t_int[1]:
-                                label = event_id if event_id not in label_added else ""
-                                ax[i].axvspan(ev.time_start, ev.time_end, alpha=0.3, color=color, label=label)
-                                if event_id not in label_added:
-                                    label_added.add(event_id)
-        elif events_lst:
-            # Fallback: plot all events on all subplots
-            for _, ev in events_X_df[events_X_df.eID.isin(events_lst)].iterrows():
-                if t_int[0] <= ev.time_end and ev.time_start <= t_int[1]:
-                    color = event_colors[ev['eID']]
-                    label = ev['eID'] if ev['eID'] not in label_added else ""
-                    ax[i].axvspan(ev.time_start, ev.time_end, alpha=0.3, color=color, label=label)
-                    if ev['eID'] not in label_added:
-                        label_added.add(ev['eID'])
-        
         ax[i].legend(loc="upper right")
+
+        if events_lst:
+            for _, ev in events_X_df[events_X_df.eID.isin(events_lst)].iterrows():
+                if t_int[0] <= ev.time_s <= t_int[1]:
+                    ax[i].axvline(ev.time_s, linestyle="--", alpha=0.6)
 
     ax[-1].set_xlabel("Time [s]")
     plt.tight_layout()
-    plt.show();
-    plt.close()
+    plt.show()
+
+
+def basic_event_stats(events_X_df):
+    """
+    Compute basic statistics and plot histograms for timestamped events.
+
+    Parameters
+    ----------
+    events_X_df : pandas.DataFrame
+        Must contain columns ['time_s', 'eID']
+
+    Returns
+    -------
+    stats : dict
+        Dictionary with overall and per-event statistics
+    """
+
+    df = events_X_df.copy()
+
+    # --- 1. CLEANING ---
+    df = df[['time_s', 'eID']].dropna()
+    df['time_s'] = pd.to_numeric(df['time_s'], errors='coerce')
+    df = df.dropna().sort_values('time_s').reset_index(drop=True)
+
+    # --- 2. OVERALL STATISTICS ---
+    total_events = len(df)
+    unique_events = df['eID'].nunique()
+    duration = df['time_s'].max() - df['time_s'].min()
+
+    event_counts = df['eID'].value_counts().sort_index()
+
+    overall_stats = {
+        "total_events": total_events,
+        "unique_event_types": unique_events,
+        "time_span_s": duration,
+        "event_counts": event_counts.to_dict()
+    }
+
+    # --- 3. PER-EVENT STATISTICS ---
+    per_event_stats = {}
+
+    for eid, group in df.groupby('eID'):
+        times = group['time_s'].values
+        inter_times = np.diff(times) if len(times) > 1 else np.array([])
+
+        per_event_stats[eid] = {
+            "count": len(times),
+            "first_time": times.min(),
+            "last_time": times.max(),
+            "mean_inter_event_time": inter_times.mean() if len(inter_times) else None,
+            "std_inter_event_time": inter_times.std() if len(inter_times) else None
+        }
+
+    # --- 4. PLOTTING ---
+
+    # Histogram: event counts
+    plt.figure()
+    event_counts.plot(kind='bar')
+    plt.xlabel("Event ID")
+    plt.ylabel("Count")
+    plt.title("Number of occurrences per event type")
+    plt.tight_layout()
+    plt.show()
+
+    # Histograms: timestamps per event
+    '''
+    unique_ids = sorted(df['eID'].unique())
+
+    for eid in unique_ids:
+        plt.figure()
+        subset = df[df['eID'] == eid]['time_s']
+        plt.hist(subset, bins=30)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Frequency")
+        plt.title(f"Timestamp distribution for event {eid}")
+        plt.tight_layout()
+        plt.show()
+    '''
+    stats = {
+        "overall": overall_stats,
+        "per_event": per_event_stats
+    }
+
+    return stats

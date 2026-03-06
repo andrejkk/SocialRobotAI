@@ -14,10 +14,15 @@
   - implement simple version ✅
   - try RBF kernel
 
-## 3.3.
+## 6.3.
 
-- correct evaluation ✅
-- fix SVM to use new data structure
-- document and analyse SVM baseline
+- Evaluation:
+  - correct data to be as start_time, end_time ✅
+  - test
+  - add folding
+  - check evaluation with long events and single events (start_time == end_time)
+  - micro macro averaging matrics
+  - binary classification
+- Find and test on another DB
+- Try with Luka's signals when ready
 - generalize scripts to take N number of signals
-- Najeh article
