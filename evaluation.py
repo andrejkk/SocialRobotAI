@@ -11,25 +11,87 @@ False Negative (FN) = Missed real activity time not covered by prediction
 Precision: Interpretation: 94.7% of predicted activity duration is correct.
 Recall: Interpretation: 98.4% of the real activity duration was captured.
 
+Event Types:
+- Interval events: time_start < time_end (e.g., speaking from 10:00 to 10:15)
+- Instantaneous events: time_start == time_end (e.g., button press at exact time)
+
+Instantaneous Event Evaluation (Tolerance-Based):
+  For instantaneous events, a tolerance window is applied:
+  |pred_time - gt_time| ≤ τ → TP
+  
+  Implementation: Instantaneous events are expanded to [time - τ, time + τ],
+  then evaluated using standard interval logic.
+
 """
 
 
+def expand_instantaneous_events(events_df, tolerance=0.5):
+    """
+    Expand instantaneous events (time_start == time_end) to tolerance windows.
+    Instantaneous events are converted to [time - tolerance, time + tolerance].
+    Interval events remain unchanged.
+    
+    Parameters:
+    - events_df: DataFrame with 'time_start', 'time_end', and 'eID' columns
+    - tolerance: Tolerance window in seconds (default: 0.5 seconds)
+    
+    Returns:
+    - DataFrame with expanded event intervals
+    """
+    expanded = events_df.copy()
+    
+    # Find instantaneous events (time_start == time_end)
+    is_instantaneous = expanded['time_start'] == expanded['time_end']
+    
+    # Expand instantaneous events by tolerance
+    expanded.loc[is_instantaneous, 'time_start'] = expanded.loc[is_instantaneous, 'time_start'] - tolerance
+    expanded.loc[is_instantaneous, 'time_end'] = expanded.loc[is_instantaneous, 'time_end'] + tolerance
+    
+    return expanded
 
 
-def evaluate_events(gt_df, pred_df, eval_start_time=None):
+def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_tolerance=0.5):
     """
     Evaluate event detection performance using temporal overlap metrics.
+    
+    Supports two event types:
+    - Interval events: time_start < time_end (evaluated using temporal overlap)
+    - Instantaneous events: time_start == time_end (evaluated using tolerance window)
     
     Parameters:
     - gt_df: Ground truth DataFrame with 'time_start', 'time_end', and 'eID' columns
     - pred_df: Predicted events DataFrame with 'time_start', 'time_end', and 'eID' columns
     - eval_start_time: Optional start time for evaluation (e.g., train/test split point)
                       If provided, only events with time_start >= eval_start_time are evaluated
+    - instantaneous_tolerance: Tolerance window in seconds for instantaneous events (default: 0.5s)
+                              Instantaneous events are expanded to [time - tolerance, time + tolerance]
     
     Returns:
     - Dictionary with TP, FP, FN (in seconds) and precision, recall, F1-score
     
+    Metrics:
+    - TP (True Positive): Overlapping time between GT and predicted (seconds)
+    - FP (False Positive): Predicted time outside GT boundaries (seconds)
+    - FN (False Negative): GT time not covered by prediction (seconds)
+    
     """
+    # Expand instantaneous events (time_start == time_end) to tolerance windows
+    gt_has_instantaneous = (gt_df['time_start'] == gt_df['time_end']).any()
+    pred_has_instantaneous = (pred_df['time_start'] == pred_df['time_end']).any()
+    
+    if gt_has_instantaneous or pred_has_instantaneous:
+        print(f"\nInstantaneous events detected. Expanding with tolerance window: ±{instantaneous_tolerance}s")
+        if gt_has_instantaneous:
+            num_instant_gt = (gt_df['time_start'] == gt_df['time_end']).sum()
+            print(f"  GT: {num_instant_gt} instantaneous events will be expanded")
+        if pred_has_instantaneous:
+            num_instant_pred = (pred_df['time_start'] == pred_df['time_end']).sum()
+            print(f"  Predicted: {num_instant_pred} instantaneous events will be expanded")
+    
+    print('tolerance: ', instantaneous_tolerance)
+    gt_df = expand_instantaneous_events(gt_df, tolerance=instantaneous_tolerance)
+    pred_df = expand_instantaneous_events(pred_df, tolerance=instantaneous_tolerance)
+    
     # Filter events by eval_start_time if provided
     if eval_start_time is not None:
         gt_df = gt_df[gt_df['time_end'] >= eval_start_time].reset_index(drop=True)
@@ -276,10 +338,10 @@ def plot_signals_with_events(sigs_df, gt_events_df, pred_events_df, t_int=[1, 50
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate predicted events against ground truth events')
     parser.add_argument('gt_file', help='Path to ground truth events xlsx file')
-    parser.add_argument('pred_file', nargs='?', default=None, help='Path to predicted events xlsx file (optional). If not provided, predicted events will be randomly generated from ground truth with perturbations.')
+    parser.add_argument('pred_file', help='Path to predicted events xlsx file')
     parser.add_argument('--signals-file', default='GenData/sigs_X_df.xlsx', help='Path to signals xlsx file (default: GenData/sigs_X_df.xlsx)')
     parser.add_argument('--output', default='GenData/events_evaluation_plot.png', help='Output path for the plot (default: GenData/events_evaluation_plot.png)')
-    parser.add_argument('--time-deviation', type=float, default=0.5, help='Std dev of time deviations for generated predictions (seconds, default: 0.5)')
+    parser.add_argument('--instantaneous-tolerance', type=float, default=0.5, help='Tolerance window in seconds for instantaneous events (default: 0.5s). Instantaneous events are expanded to [time - tolerance, time + tolerance]')
     parser.add_argument('--eval-start-time', type=float, default=None, help='Start time for evaluation in seconds (e.g., train/test split point). If not provided, uses min time_start from predictions (default: None)')
     
     args = parser.parse_args()
@@ -291,11 +353,15 @@ if __name__ == "__main__":
         print("ERROR: Ground truth file (gt_file) is required!")
         print("=" * 60)
         print("\nUsage:")
-        print("  python evaluation.py <gt_file> [pred_file] [options]")
+        print("  python evaluation.py <gt_file> <pred_file> [options]")
         print("\nData Format: Excel files with columns: time_start, time_end, eID")
+        print("  - Interval events: time_start < time_end (e.g., speaking from 10:00 to 10:15)")
+        print("  - Instantaneous events: time_start == time_end (one timestamp, evaluated with tolerance window)")
         print("\nExamples:")
-        print("  # Evaluate with provided predicted file:")
+        print("  # Basic evaluation:")
         print("  python evaluation.py GenData/events_X_df.xlsx GenData/predictions.xlsx")
+        print("\n  # Specify tolerance for instantaneous events (default 0.5s):")
+        print("  python evaluation.py GenData/events_X_df.xlsx GenData/predictions.xlsx --instantaneous-tolerance 1.0")
         exit(1)
     
     # Load ground truth events
@@ -303,15 +369,10 @@ if __name__ == "__main__":
     gt_events_df = pd.read_excel(args.gt_file)
     print(f"  Loaded {len(gt_events_df)} ground truth events")
     
-    # Load or generate predicted events
-    if args.pred_file:
-        print(f"Loading predicted events from: {args.pred_file}")
-        pred_events_df = pd.read_excel(args.pred_file)
-        print(f"  Loaded {len(pred_events_df)} predicted events")
-    else:
-        print("No predicted events file provided.")
-
-    print(f"Total predicted events: {len(pred_events_df)}")
+    # Load predicted events
+    print(f"Loading predicted events from: {args.pred_file}")
+    pred_events_df = pd.read_excel(args.pred_file)
+    print(f"  Loaded {len(pred_events_df)} predicted events")
     
     # Determine evaluation start time
     eval_start_time = args.eval_start_time
@@ -323,7 +384,12 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Evaluation: Ground Truth vs. Predicted Events (Temporal Overlap)")
     print("=" * 60)
-    result = evaluate_events(gt_events_df, pred_events_df, eval_start_time=eval_start_time)
+    result = evaluate_events(
+        gt_events_df, 
+        pred_events_df, 
+        eval_start_time=eval_start_time,
+        instantaneous_tolerance=args.instantaneous_tolerance
+    )
     print(f"True Positive (TP):  {result['tp']:.4f} seconds")
     print(f"False Positive (FP): {result['fp']:.4f} seconds")
     print(f"False Negative (FN): {result['fn']:.4f} seconds")
