@@ -19,10 +19,11 @@
 - Evaluation:
   - correct data to be as start_time, end_time ✅
   - test
-  - add folding
-  - check evaluation with long events and single events (start_time == end_time)
-  - micro macro averaging matrics
+  - add folding, do we need it now?
+  - check evaluation with long events and single events (start_time == end_time) ✅
+  - micro macro averaging matrics, test and add more events to the test
   - binary classification
+- SVM
 - Find and test on another DB
 - Try with Luka's signals when ready
 - generalize scripts to take N number of signals

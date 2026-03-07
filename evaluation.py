@@ -8,8 +8,19 @@ True Positive (TP) = Correctly overlapped time between real and simulated segmen
 False Positive (FP) = Extra predicted time outside the real activity
 False Negative (FN) = Missed real activity time not covered by prediction
 
-Precision: Interpretation: 94.7% of predicted activity duration is correct.
-Recall: Interpretation: 98.4% of the real activity duration was captured.
+MACRO-Averaged Metrics (weighted by duration):
+  Precision = Total TP / (Total TP + Total FP)
+  Recall = Total TP / (Total TP + Total FN)
+  - Longer events have more weight
+  - Use when event duration importance varies
+  - Example: Speaking segment (long) weighted more than button press (instantaneous)
+
+MICRO-Averaged Metrics (equal weight per event type):
+  Precision = Mean of (TP_i / (TP_i + FP_i)) for each event type i
+  Recall = Mean of (TP_i / (TP_i + FN_i)) for each event type i
+  - Each event type has equal importance regardless of duration
+  - Use when all event types should be equally valued
+  - Better for imbalanced event distributions
 
 Event Types:
 - Interval events: time_start < time_end (e.g., speaking from 10:00 to 10:15)
@@ -105,10 +116,20 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
     total_fn = 0.0
     comparisons = []  # Store individual comparisons for logging
     
+    # Track metrics per eID for micro-averaging
+    eID_metrics = {}  # {eID: {'tp': float, 'fp': float, 'fn': float}}
+    
     # Group by eID to match events of the same type
     for eid in set(list(gt_df['eID'].unique()) + list(pred_df['eID'].unique())):
+        # Initialize metrics for this eID
+        eID_metrics[eid] = {'tp': 0.0, 'fp': 0.0, 'fn': 0.0}
         gt_events = gt_df[gt_df['eID'] == eid].reset_index(drop=True)
         pred_events = pred_df[pred_df['eID'] == eid].reset_index(drop=True)
+        
+        # Local counters for this eID
+        eid_tp = 0.0
+        eid_fp = 0.0
+        eid_fn = 0.0
         
         print(f"\n--- Processing eID: {eid} ---")
         print(f"  GT events: {len(gt_events)}, Predicted events: {len(pred_events)}")
@@ -186,12 +207,16 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
                 total_tp += tp
                 total_fp += fp
                 total_fn += fn
+                eid_tp += tp
+                eid_fp += fp
+                eid_fn += fn
                 used_pred.add(best_pred_idx)
             else:
                 # GT event not matched - entire GT duration is false negative
                 fn_unmatched = gt_end - gt_start
                 print(f"  NO match for GT interval [{gt_start:.2f}-{gt_end:.2f}]s - All FN: {fn_unmatched:.4f}s")
                 total_fn += fn_unmatched
+                eid_fn += fn_unmatched
         
         # Unmatched predicted events contribute to FP
         for pred_idx, pred_event in pred_events.iterrows():
@@ -199,20 +224,51 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
                 fp_unmatched = pred_event['time_end'] - pred_event['time_start']
                 print(f"  Unmatched predicted interval [{pred_event['time_start']:.2f}-{pred_event['time_end']:.2f}]s - All FP: {fp_unmatched:.4f}s")
                 total_fp += fp_unmatched
+                eid_fp += fp_unmatched
+        
+        # Store accumulated metrics for this eID
+        eID_metrics[eid] = {'tp': eid_tp, 'fp': eid_fp, 'fn': eid_fn}
     
-    # Calculate precision, recall, F1
-    precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
-    recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    # Calculate MACRO-averaged metrics (weighted by duration)
+    macro_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    macro_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
+    macro_f1 = 2 * macro_precision * macro_recall / (macro_precision + macro_recall) if (macro_precision + macro_recall) > 0 else 0
+    
+    # Calculate MICRO-averaged metrics (equal weight to each event type)
+    micro_precisions = []
+    micro_recalls = []
+    for eid, metrics in eID_metrics.items():
+        eid_tp = metrics['tp']
+        eid_fp = metrics['fp']
+        eid_fn = metrics['fn']
+        
+        # Calculate metrics for this eID
+        eid_precision = eid_tp / (eid_tp + eid_fp) if (eid_tp + eid_fp) > 0 else 0
+        eid_recall = eid_tp / (eid_tp + eid_fn) if (eid_tp + eid_fn) > 0 else 0
+        
+        micro_precisions.append(eid_precision)
+        micro_recalls.append(eid_recall)
+    
+    # Average across all event types
+    micro_precision = np.mean(micro_precisions) if micro_precisions else 0
+    micro_recall = np.mean(micro_recalls) if micro_recalls else 0
+    micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
     
     return {
         'tp': total_tp,
         'fp': total_fp,
         'fn': total_fn,
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'comparisons': comparisons
+        'macro_precision': macro_precision,
+        'macro_recall': macro_recall,
+        'macro_f1': macro_f1,
+        'micro_precision': micro_precision,
+        'micro_recall': micro_recall,
+        'micro_f1': micro_f1,
+        'eID_metrics': eID_metrics,
+        'comparisons': comparisons,
+        'precision': macro_precision,  # Keep for backward compatibility
+        'recall': macro_recall,
+        'f1': macro_f1
     }
 
 
@@ -393,9 +449,37 @@ if __name__ == "__main__":
     print(f"True Positive (TP):  {result['tp']:.4f} seconds")
     print(f"False Positive (FP): {result['fp']:.4f} seconds")
     print(f"False Negative (FN): {result['fn']:.4f} seconds")
-    print(f"\nPrecision: {result['precision']:.4f} (TP / (TP + FP))")
-    print(f"Recall:    {result['recall']:.4f} (TP / (TP + FN))")
-    print(f"F1-Score:  {result['f1']:.4f}\n")
+    
+    print("\n" + "=" * 60)
+    print("MACRO-Averaged Metrics (weighted by event duration):")
+    print("=" * 60)
+    print(f"Precision: {result['macro_precision']:.4f} (TP / (TP + FP))")
+    print(f"Recall:    {result['macro_recall']:.4f} (TP / (TP + FN))")
+    print(f"F1-Score:  {result['macro_f1']:.4f}\n")
+    
+    print("=" * 60)
+    print("MICRO-Averaged Metrics (equal weight to each event type):")
+    print("=" * 60)
+    print(f"Precision: {result['micro_precision']:.4f}")
+    print(f"Recall:    {result['micro_recall']:.4f}")
+    print(f"F1-Score:  {result['micro_f1']:.4f}\n")
+    
+    # Print per-eID metrics
+    print("=" * 60)
+    print("Per-Event-Type Metrics:")
+    print("=" * 60)
+    for eid, metrics in result['eID_metrics'].items():
+        eid_tp = metrics['tp']
+        eid_fp = metrics['fp']
+        eid_fn = metrics['fn']
+        
+        eid_prec = eid_tp / (eid_tp + eid_fp) if (eid_tp + eid_fp) > 0 else 0
+        eid_rec = eid_tp / (eid_tp + eid_fn) if (eid_tp + eid_fn) > 0 else 0
+        eid_f1 = 2 * eid_prec * eid_rec / (eid_prec + eid_rec) if (eid_prec + eid_rec) > 0 else 0
+        
+        print(f"\n{eid}:")
+        print(f"  TP: {eid_tp:.4f}s, FP: {eid_fp:.4f}s, FN: {eid_fn:.4f}s")
+        print(f"  Precision: {eid_prec:.4f}, Recall: {eid_rec:.4f}, F1: {eid_f1:.4f}")
     
     # Visualization: Load signals and plot with both event types
     print("=" * 60)
