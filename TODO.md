@@ -18,12 +18,14 @@
 
 - Evaluation:
   - correct data to be as start_time, end_time ✅
-  - test
-  - add folding, do we need it now?
+  - test ✅
+  - add folding: we dont want to have some event in test set that is not present in train set
   - check evaluation with long events and single events (start_time == end_time) ✅
-  - micro macro averaging matrics, test and add more events to the test
+  - micro macro averaging matrics, test and add more events to the test ✅
   - binary classification
+  - evaluate on different train/test splits
 - SVM
 - Find and test on another DB
 - Try with Luka's signals when ready
 - generalize scripts to take N number of signals
+- organize repo
