@@ -8,60 +8,74 @@ True Positive (TP) = Correctly overlapped time between real and simulated segmen
 False Positive (FP) = Extra predicted time outside the real activity
 False Negative (FN) = Missed real activity time not covered by prediction
 
-Precision: Interpretation: 94.7% of predicted activity duration is correct.
-Recall: Interpretation: 98.4% of the real activity duration was captured.
+MACRO-Averaged Metrics (weighted by duration):
+  Precision = Total TP / (Total TP + Total FP)
+  Recall = Total TP / (Total TP + Total FN)
+  - Longer events have more weight
+  - Use when event duration importance varies
+  - Example: Speaking segment (long) weighted more than button press (instantaneous)
+
+MICRO-Averaged Metrics (equal weight per event type):
+  Precision = Mean of (TP_i / (TP_i + FP_i)) for each event type i
+  Recall = Mean of (TP_i / (TP_i + FN_i)) for each event type i
+  - Each event type has equal importance regardless of duration
+  - Use when all event types should be equally valued
+  - Better for imbalanced event distributions
+
+Event Types:
+- Interval events: time_start < time_end (e.g., speaking from 10:00 to 10:15)
+- Instantaneous events: time_start == time_end (e.g., button press at exact time)
+
+Instantaneous Event Evaluation (Tolerance-Based):
+  For instantaneous events, a tolerance window is applied:
+  |pred_time - gt_time| ≤ τ → TP
+  
+  Implementation: Instantaneous events are expanded to [time - τ, time + τ],
+  then evaluated using standard interval logic.
 
 """
 
-def perturb_events(events_df, time_deviation_std=0.5, event_misalignment_prob=0.1, seed=None):
+
+def expand_instantaneous_events(events_df, tolerance=0.5):
     """
-    Generate predicted events from ground truth by adding perturbations.
-    Creates variations including time deviations and event misalignments.
+    Expand instantaneous events (time_start == time_end) to tolerance windows.
+    Instantaneous events are converted to [time - tolerance, time + tolerance].
+    Interval events remain unchanged.
     
     Parameters:
     - events_df: DataFrame with 'time_start', 'time_end', and 'eID' columns
-    - time_deviation_std: Standard deviation of Gaussian noise for start/end times (seconds)
-    - event_misalignment_prob: Probability of predicting wrong event ID (0-1)
-    - seed: Random seed for reproducibility
+    - tolerance: Tolerance window in seconds (default: 0.5 seconds)
     
     Returns:
-    - Perturbed DataFrame with same structure as input
+    - DataFrame with expanded event intervals
     """
-    if seed is not None:
-        np.random.seed(seed)
+    expanded = events_df.copy()
     
-    perturbed = events_df.copy()
-    event_ids = list(events_df['eID'].unique())
+    # Find instantaneous events (time_start == time_end)
+    is_instantaneous = expanded['time_start'] == expanded['time_end']
     
-    # Add independent noise to start and end times (as integers)
-    perturbed['time_start'] = perturbed['time_start'] + np.round(np.random.normal(0, time_deviation_std, size=len(perturbed))).astype(int)
-    perturbed['time_end'] = perturbed['time_end'] + np.round(np.random.normal(0, time_deviation_std, size=len(perturbed))).astype(int)
+    # Expand instantaneous events by tolerance
+    expanded.loc[is_instantaneous, 'time_start'] = expanded.loc[is_instantaneous, 'time_start'] - tolerance
+    expanded.loc[is_instantaneous, 'time_end'] = expanded.loc[is_instantaneous, 'time_end'] + tolerance
     
-    # Ensure start < end after perturbation
-    perturbed[['time_start', 'time_end']] = perturbed[['time_start', 'time_end']].apply(
-        lambda row: pd.Series([min(row['time_start'], row['time_end']), max(row['time_start'], row['time_end'])]),
-        axis=1,
-        result_type='expand'
-    )
-    
-    # Introduce event misalignment (wrong event ID predictions)
-    misalignment_mask = np.random.rand(len(perturbed)) < event_misalignment_prob
-    for idx in np.where(misalignment_mask)[0]:
-        current_id = perturbed.at[idx, 'eID']
-        other_ids = [eid for eid in event_ids if eid != current_id]
-        if other_ids:
-            perturbed.at[idx, 'eID'] = np.random.choice(other_ids)
-    
-    return perturbed
+    return expanded
 
 
-def evaluate_events(gt_df, pred_df):
+def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_tolerance=0.5):
     """
     Evaluate event detection performance using temporal overlap metrics.
+    
+    Supports two event types:
+    - Interval events: time_start < time_end (evaluated using temporal overlap)
+    - Instantaneous events: time_start == time_end (evaluated using tolerance window)
     
     Parameters:
     - gt_df: Ground truth DataFrame with 'time_start', 'time_end', and 'eID' columns
     - pred_df: Predicted events DataFrame with 'time_start', 'time_end', and 'eID' columns
+    - eval_start_time: Optional start time for evaluation (e.g., train/test split point)
+                      If provided, only events with time_start >= eval_start_time are evaluated
+    - instantaneous_tolerance: Tolerance window in seconds for instantaneous events (default: 0.5s)
+                              Instantaneous events are expanded to [time - tolerance, time + tolerance]
     
     Returns:
     - Dictionary with TP, FP, FN (in seconds) and precision, recall, F1-score
@@ -70,21 +84,60 @@ def evaluate_events(gt_df, pred_df):
     - TP (True Positive): Overlapping time between GT and predicted (seconds)
     - FP (False Positive): Predicted time outside GT boundaries (seconds)
     - FN (False Negative): GT time not covered by prediction (seconds)
+    
     """
+    # Expand instantaneous events (time_start == time_end) to tolerance windows
+    gt_has_instantaneous = (gt_df['time_start'] == gt_df['time_end']).any()
+    pred_has_instantaneous = (pred_df['time_start'] == pred_df['time_end']).any()
+    
+    if gt_has_instantaneous or pred_has_instantaneous:
+        print(f"\nInstantaneous events detected. Expanding with tolerance window: ±{instantaneous_tolerance}s")
+        if gt_has_instantaneous:
+            num_instant_gt = (gt_df['time_start'] == gt_df['time_end']).sum()
+            print(f"  GT: {num_instant_gt} instantaneous events will be expanded")
+        if pred_has_instantaneous:
+            num_instant_pred = (pred_df['time_start'] == pred_df['time_end']).sum()
+            print(f"  Predicted: {num_instant_pred} instantaneous events will be expanded")
+    
+    print('tolerance: ', instantaneous_tolerance)
+    gt_df = expand_instantaneous_events(gt_df, tolerance=instantaneous_tolerance)
+    pred_df = expand_instantaneous_events(pred_df, tolerance=instantaneous_tolerance)
+    
+    # Filter events by eval_start_time if provided
+    if eval_start_time is not None:
+        gt_df = gt_df[gt_df['time_end'] >= eval_start_time].reset_index(drop=True)
+        pred_df = pred_df[pred_df['time_end'] >= eval_start_time].reset_index(drop=True)
+        print(f"\nFiltering events by eval_start_time: {eval_start_time}s")
+        print(f"  GT events after filtering: {len(gt_df)}")
+        print(f"  Predicted events after filtering: {len(pred_df)}")
+    
     total_tp = 0.0
     total_fp = 0.0
     total_fn = 0.0
     comparisons = []  # Store individual comparisons for logging
     
+    # Track metrics per eID for micro-averaging
+    eID_metrics = {}  # {eID: {'tp': float, 'fp': float, 'fn': float}}
+    
     # Group by eID to match events of the same type
     for eid in set(list(gt_df['eID'].unique()) + list(pred_df['eID'].unique())):
+        # Initialize metrics for this eID
+        eID_metrics[eid] = {'tp': 0.0, 'fp': 0.0, 'fn': 0.0}
         gt_events = gt_df[gt_df['eID'] == eid].reset_index(drop=True)
         pred_events = pred_df[pred_df['eID'] == eid].reset_index(drop=True)
+        
+        # Local counters for this eID
+        eid_tp = 0.0
+        eid_fp = 0.0
+        eid_fn = 0.0
+        
+        print(f"\n--- Processing eID: {eid} ---")
+        print(f"  GT events: {len(gt_events)}, Predicted events: {len(pred_events)}")
         
         # For each GT event, find the best matching predicted event
         used_pred = set()
         
-        for _, gt_event in gt_events.iterrows():
+        for gt_idx, gt_event in gt_events.iterrows():
             gt_start = gt_event['time_start']
             gt_end = gt_event['time_end']
             
@@ -114,18 +167,27 @@ def evaluate_events(gt_df, pred_df):
                 # Calculate metrics for this pair
                 overlap_start = max(gt_start, pred_start)
                 overlap_end = min(gt_end, pred_end)
-                tp = max(0, overlap_end - overlap_start)
-                
+
+                gt_duration = gt_end - gt_start
+                pred_duration = pred_end - pred_start
+
+                tp = max(0.0, overlap_end - overlap_start)
+
                 # FP: predicted time outside GT
-                fp = max(0, gt_start - pred_start) + max(0, pred_end - gt_end)
+                fp = max(0.0, pred_duration - tp)
                 
                 # FN: GT time not covered by predicted
-                fn = max(0, pred_start - gt_start) + max(0, gt_end - pred_end)
+                fn = max(0.0, gt_duration - tp)
                 
                 # Calculate per-pair metrics
                 pair_precision = tp / (tp + fp) if (tp + fp) > 0 else 0
                 pair_recall = tp / (tp + fn) if (tp + fn) > 0 else 0
                 pair_f1 = 2 * pair_precision * pair_recall / (pair_precision + pair_recall) if (pair_precision + pair_recall) > 0 else 0
+                
+                print(f"  Match found for GT interval [{gt_start:.2f}-{gt_end:.2f}]s")
+                print(f"    Pred interval: [{pred_start:.2f}-{pred_end:.2f}]s")
+                print(f"    TP: {tp:.4f}s, FP: {fp:.4f}s, FN: {fn:.4f}s")
+                print(f"    Precision: {pair_precision:.4f}, Recall: {pair_recall:.4f}, F1: {pair_f1:.4f}")
                 
                 # Store comparison
                 comparisons.append({
@@ -145,29 +207,68 @@ def evaluate_events(gt_df, pred_df):
                 total_tp += tp
                 total_fp += fp
                 total_fn += fn
+                eid_tp += tp
+                eid_fp += fp
+                eid_fn += fn
                 used_pred.add(best_pred_idx)
             else:
                 # GT event not matched - entire GT duration is false negative
-                total_fn += gt_end - gt_start
+                fn_unmatched = gt_end - gt_start
+                print(f"  NO match for GT interval [{gt_start:.2f}-{gt_end:.2f}]s - All FN: {fn_unmatched:.4f}s")
+                total_fn += fn_unmatched
+                eid_fn += fn_unmatched
         
         # Unmatched predicted events contribute to FP
         for pred_idx, pred_event in pred_events.iterrows():
             if pred_idx not in used_pred:
-                total_fp += pred_event['time_end'] - pred_event['time_start']
+                fp_unmatched = pred_event['time_end'] - pred_event['time_start']
+                print(f"  Unmatched predicted interval [{pred_event['time_start']:.2f}-{pred_event['time_end']:.2f}]s - All FP: {fp_unmatched:.4f}s")
+                total_fp += fp_unmatched
+                eid_fp += fp_unmatched
+        
+        # Store accumulated metrics for this eID
+        eID_metrics[eid] = {'tp': eid_tp, 'fp': eid_fp, 'fn': eid_fn}
     
-    # Calculate precision, recall, F1
-    precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
-    recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    # Calculate MACRO-averaged metrics (weighted by duration)
+    macro_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    macro_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
+    macro_f1 = 2 * macro_precision * macro_recall / (macro_precision + macro_recall) if (macro_precision + macro_recall) > 0 else 0
+    
+    # Calculate MICRO-averaged metrics (equal weight to each event type)
+    micro_precisions = []
+    micro_recalls = []
+    for eid, metrics in eID_metrics.items():
+        eid_tp = metrics['tp']
+        eid_fp = metrics['fp']
+        eid_fn = metrics['fn']
+        
+        # Calculate metrics for this eID
+        eid_precision = eid_tp / (eid_tp + eid_fp) if (eid_tp + eid_fp) > 0 else 0
+        eid_recall = eid_tp / (eid_tp + eid_fn) if (eid_tp + eid_fn) > 0 else 0
+        
+        micro_precisions.append(eid_precision)
+        micro_recalls.append(eid_recall)
+    
+    # Average across all event types
+    micro_precision = np.mean(micro_precisions) if micro_precisions else 0
+    micro_recall = np.mean(micro_recalls) if micro_recalls else 0
+    micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
     
     return {
         'tp': total_tp,
         'fp': total_fp,
         'fn': total_fn,
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'comparisons': comparisons
+        'macro_precision': macro_precision,
+        'macro_recall': macro_recall,
+        'macro_f1': macro_f1,
+        'micro_precision': micro_precision,
+        'micro_recall': micro_recall,
+        'micro_f1': micro_f1,
+        'eID_metrics': eID_metrics,
+        'comparisons': comparisons,
+        'precision': macro_precision,  # Keep for backward compatibility
+        'recall': macro_recall,
+        'f1': macro_f1
     }
 
 
@@ -293,12 +394,11 @@ def plot_signals_with_events(sigs_df, gt_events_df, pred_events_df, t_int=[1, 50
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate predicted events against ground truth events')
     parser.add_argument('gt_file', help='Path to ground truth events xlsx file')
-    parser.add_argument('pred_file', nargs='?', default=None, help='Path to predicted events xlsx file (optional). If not provided, predicted events will be randomly generated from ground truth with perturbations.')
+    parser.add_argument('pred_file', help='Path to predicted events xlsx file')
     parser.add_argument('--signals-file', default='GenData/sigs_X_df.xlsx', help='Path to signals xlsx file (default: GenData/sigs_X_df.xlsx)')
     parser.add_argument('--output', default='GenData/events_evaluation_plot.png', help='Output path for the plot (default: GenData/events_evaluation_plot.png)')
-    parser.add_argument('--time-deviation', type=float, default=0.5, help='Std dev of time deviations for generated predictions (seconds, default: 0.5)')
-    parser.add_argument('--misalignment-prob', type=float, default=0.1, help='Probability of event misalignment in generated predictions (0-1, default: 0.1)')
-    parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducible perturbations (default: None)')
+    parser.add_argument('--instantaneous-tolerance', type=float, default=0.5, help='Tolerance window in seconds for instantaneous events (default: 0.5s). Instantaneous events are expanded to [time - tolerance, time + tolerance]')
+    parser.add_argument('--eval-start-time', type=float, default=None, help='Start time for evaluation in seconds (e.g., train/test split point). If not provided, uses min time_start from predictions (default: None)')
     
     args = parser.parse_args()
     
@@ -309,49 +409,77 @@ if __name__ == "__main__":
         print("ERROR: Ground truth file (gt_file) is required!")
         print("=" * 60)
         print("\nUsage:")
-        print("  python evaluation.py <gt_file> [pred_file] [options]")
+        print("  python evaluation.py <gt_file> <pred_file> [options]")
+        print("\nData Format: Excel files with columns: time_start, time_end, eID")
+        print("  - Interval events: time_start < time_end (e.g., speaking from 10:00 to 10:15)")
+        print("  - Instantaneous events: time_start == time_end (one timestamp, evaluated with tolerance window)")
         print("\nExamples:")
-        print("  # Evaluate with provided predicted file:")
+        print("  # Basic evaluation:")
         print("  python evaluation.py GenData/events_X_df.xlsx GenData/predictions.xlsx")
-        print("\n  # Generate random predictions from GT (with perturbations):")
-        print("  python evaluation.py GenData/events_X_df.xlsx")
-        print("\n  # Generate predictions with custom perturbation parameters:")
-        print("  python evaluation.py GenData/events_X_df.xlsx --time-deviation 0.3 --misalignment-prob 0.2 --seed 42")
+        print("\n  # Specify tolerance for instantaneous events (default 0.5s):")
+        print("  python evaluation.py GenData/events_X_df.xlsx GenData/predictions.xlsx --instantaneous-tolerance 1.0")
         exit(1)
     
     # Load ground truth events
     print(f"Loading ground truth events from: {args.gt_file}")
     gt_events_df = pd.read_excel(args.gt_file)
+    print(f"  Loaded {len(gt_events_df)} ground truth events")
     
-    # Load or generate predicted events
-    if args.pred_file:
-        print(f"Loading predicted events from: {args.pred_file}")
-        pred_events_df = pd.read_excel(args.pred_file)
-    else:
-        print("No predicted events file provided. Generating predicted events from ground truth with perturbations...")
-        print(f"  - Time deviation (std): {args.time_deviation} seconds")
-        print(f"  - Event misalignment probability: {args.misalignment_prob}")
-        print(f"  - Seed: {args.seed}\n")
-        pred_events_df = perturb_events(
-            gt_events_df,
-            time_deviation_std=args.time_deviation,
-            event_misalignment_prob=args.misalignment_prob,
-            seed=args.seed
-        )
-
-    print(f"Total predicted events: {len(pred_events_df)}\n")
+    # Load predicted events
+    print(f"Loading predicted events from: {args.pred_file}")
+    pred_events_df = pd.read_excel(args.pred_file)
+    print(f"  Loaded {len(pred_events_df)} predicted events")
+    
+    # Determine evaluation start time
+    eval_start_time = args.eval_start_time
+    if eval_start_time is None and len(pred_events_df) > 0:
+        eval_start_time = pred_events_df['time_start'].min()
+        print(f"No --eval-start-time specified. Using min time_start from predictions: {eval_start_time}s\n")
     
     # Evaluate predicted events against ground truth
     print("=" * 60)
     print("Evaluation: Ground Truth vs. Predicted Events (Temporal Overlap)")
     print("=" * 60)
-    result = evaluate_events(gt_events_df, pred_events_df)
+    result = evaluate_events(
+        gt_events_df, 
+        pred_events_df, 
+        eval_start_time=eval_start_time,
+        instantaneous_tolerance=args.instantaneous_tolerance
+    )
     print(f"True Positive (TP):  {result['tp']:.4f} seconds")
     print(f"False Positive (FP): {result['fp']:.4f} seconds")
     print(f"False Negative (FN): {result['fn']:.4f} seconds")
-    print(f"\nPrecision: {result['precision']:.4f} (TP / (TP + FP))")
-    print(f"Recall:    {result['recall']:.4f} (TP / (TP + FN))")
-    print(f"F1-Score:  {result['f1']:.4f}\n")
+    
+    print("\n" + "=" * 60)
+    print("MACRO-Averaged Metrics (weighted by event duration):")
+    print("=" * 60)
+    print(f"Precision: {result['macro_precision']:.4f} (TP / (TP + FP))")
+    print(f"Recall:    {result['macro_recall']:.4f} (TP / (TP + FN))")
+    print(f"F1-Score:  {result['macro_f1']:.4f}\n")
+    
+    print("=" * 60)
+    print("MICRO-Averaged Metrics (equal weight to each event type):")
+    print("=" * 60)
+    print(f"Precision: {result['micro_precision']:.4f}")
+    print(f"Recall:    {result['micro_recall']:.4f}")
+    print(f"F1-Score:  {result['micro_f1']:.4f}\n")
+    
+    # Print per-eID metrics
+    print("=" * 60)
+    print("Per-Event-Type Metrics:")
+    print("=" * 60)
+    for eid, metrics in result['eID_metrics'].items():
+        eid_tp = metrics['tp']
+        eid_fp = metrics['fp']
+        eid_fn = metrics['fn']
+        
+        eid_prec = eid_tp / (eid_tp + eid_fp) if (eid_tp + eid_fp) > 0 else 0
+        eid_rec = eid_tp / (eid_tp + eid_fn) if (eid_tp + eid_fn) > 0 else 0
+        eid_f1 = 2 * eid_prec * eid_rec / (eid_prec + eid_rec) if (eid_prec + eid_rec) > 0 else 0
+        
+        print(f"\n{eid}:")
+        print(f"  TP: {eid_tp:.4f}s, FP: {eid_fp:.4f}s, FN: {eid_fn:.4f}s")
+        print(f"  Precision: {eid_prec:.4f}, Recall: {eid_rec:.4f}, F1: {eid_f1:.4f}")
     
     # Visualization: Load signals and plot with both event types
     print("=" * 60)

@@ -57,61 +57,124 @@ time_s sig_1 sig_2 sig_3 sig_4
 
 Important: we will use SVM from sklearn: sklearn.svm.SVC, use SVC(class_weight="balanced")
 
-Step 1: Load data 
-- load data in a similar way to z-score-baseline.py baseline
-- read signals, read event types
-- Keep full signal timeline, Do NOT drop non-event rows
+STEP 1: Load Signal Data
+========================
+- Read signals from Excel file (sigs_X_df.xlsx)
+- Expected columns: time_s, sig_1, sig_2, sig_3, sig_4
+- Keep full signal timeline (no filtering)
+- Store as pandas DataFrame, sorted by time_s
 
-Step 2 — Clean and Validate Time Alignment
-Since events cannot fall between samples:
-- Check that every event timestamp exists in sigs_df["time_s"]
-- If any mismatch appears, raise an error (not nearest match)
 
-Step 3: Create Label Vector
-Use a direct merge on time_s:
+STEP 1b: Load Event Ground Truth (Interval-Based)
+==================================================
+- Read events from Excel file (events_X_df.xlsx)
+- Expected columns: time_start, time_end, eID
+- Events are intervals with start and end times
+- Store as pandas DataFrame, sorted by time_start
+
+
+STEP 2: Clean and Validate Time Alignment
+===========================================
+- Check that every event interval [time_start, time_end] falls within signal time range
+- Validate: event_start < event_end
+- Raise error if validation fails (no auto-correction)
+- Output validation report with status and detailed issues
+
+
+STEP 3: Create Label Vector
+==============================================================
+Map event intervals to signal samples:
+
 Process:
-1. Initialize all signal rows with label = 0
-2. Merge event dataframe onto signal dataframe using time_s
-3. Replace labels where events exist
-4. Fill missing labels with 0
+1. Create mapping: event_id_string → numeric_label (1, 2, 3, ...)
+2. Initialize all signal rows with label = 0 (no event)
+3. For each signal sample at time t:
+   - Check if t falls within ANY event interval [time_start, time_end]
+   - If multiple events overlap at time t, use latest event (by start time)
+   - Otherwise keep label = 0
+4. Result: DataFrame [time_s, sig_1, sig_2, sig_3, sig_4, label]
 
-Final dataframe structure:
-time_s
-sig_1 … sig_4
-label
 
-Step 4 – Feature Extraction
-Sliding window around each timestamp (e.g., ±2 samples = ±0.1 s at 20 Hz)
+STEP 4: Feature Extraction with Sliding Window
+================================================
+- Extract features using temporal context around each sample
+- Window: ±2 samples = ±0.1s at 20Hz sampling rate
+- For each sample t: extract signals from [t-2, t-1, t, t+1, t+2]
+- 4 signals × 5 time points = 20 features per sample
+- Handle boundaries by repeating edge values
 
-Step 5 - Build X and y for sklearn
-From the processed dataframe:
-X: all signal columns (shape: N × 4)
-y: label column (shape: N)
-Do NOT filter only event rows
-Keep the full timeline (including no-event samples)
 
-Step 6:
-Without correction, the model will predict only “no event”. Use class weighting in SVM
+STEP 5: Build X and y for sklearn + Train/Test Split
+=======================================================
+- X: Feature matrix (N_samples, 20 features)
+- y: Label vector from Step 3 (N_samples,)
+- Keep full timeline (including no-event samples)
+- Train/Test split: 70% training / 30% testing (temporal split)
+- Maintains chronological order for realistic evaluation
 
-Step 7:
-Your signals have different magnitudes. SVM is highly sensitive to scale.
-Procedure:
 
-1. Fit scaler on training features only
-2. Transform training features
-3. Transform test features using same scaler
-Recommended scaler:
-StandardScaler (mean=0, std=1)
+STEP 6: Handle Class Imbalance
+================================
+Problem: Most samples are label=0 (no event), creating severe imbalance
+Solution: Use class_weight="balanced" in SVM
+- Automatically reweights classes inversely proportional to frequency
+- Prevents model from always predicting "no event"
+- Critical for detecting minority event classes
 
-Step 8: Train SVM (sklearn: sklearn.svm.SVC)
-Use SVM from sklearn
-Recommended baseline configuration:
-- Kernel: Linear kernel (simple baseline)
-- class_weight: "balanced"
-- decision_function_shape: "ovr" (default, fine for multiclass)
 
-Step 9: Evaluate
-Confusion matrix
-Precision/Recall per event type
-F1-score
-Detection latency (optional)
+STEP 7: Feature Scaling (StandardScaler)
+==========================================
+- SVM is highly sensitive to feature magnitude
+- Procedure:
+  1. Fit scaler on training features ONLY
+  2. Transform training features
+  3. Transform test features using SAME scaler (prevent data leakage)
+- Result: All features normalized to mean=0, std=1
+
+
+STEP 8: Train SVM Model
+========================
+Algorithm: sklearn.svm.SVC
+- Kernel: "linear" (simple interpretable baseline)
+- class_weight: "balanced" (handles class imbalance)
+- decision_function_shape: "ovr" (one-vs-rest for multiclass)
+- Input: X_train_scaled, y_train
+- Output: Trained SVM model with decision boundaries
+
+
+STEP 9: Make Predictions on Test Set
+=====================================
+- Apply trained model to X_test_scaled
+- Output: y_pred (per-sample predictions, 0 or 1/2/3/...)
+- One prediction per sample
+
+STEP 10: Convert Point Predictions to Event Intervals (NEW)
+===========================================================
+
+Problem: SVM outputs per-sample predictions, but ground truth has event intervals
+Solution: Detect state transitions to infer event boundaries
+
+Algorithm (State Machine):
+  - Track current_label starting at 0
+  - Scan predictions with timestamps
+  - Detect transitions:
+    * 0 → non-zero: event starts
+    * non-zero → different: previous ends, new starts
+    * non-zero → 0: event ends
+
+Post-Processing (Duration Constraints):
+  - Filter events < min_duration_s (default: 1.0s) - removes noise
+  - Cap events > max_duration_s (default: 7.0s) - prevents unrealistic events
+  - Convert numeric labels back to event_id strings
+
+Output: DataFrame [time_start, time_end, eID]
+
+This step enables compatibility between point predictions and interval ground truth.
+
+
+STEP 11: Save Predicted Events
+================================
+- Save predicted event intervals to Excel file
+- Format: [time_start, time_end, eID]
+- File: predicted_events_svm.xlsx
+- Compatible with evaluation.py input

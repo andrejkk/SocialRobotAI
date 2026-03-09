@@ -1,14 +1,11 @@
 #%% Imports
 import pandas as pd
-import signal_generation_tools as sgt
+import numpy as np
+import matplotlib.pyplot as plt
 import importlib
 
+import signal_generation_tools as sgt
 importlib.reload(sgt)
-
-
-#%% Settings
-data_path = '../GenData/'
-save_Q = True
 
 
 #%% Define signals
@@ -28,19 +25,52 @@ ar_params = [
     [0.8, -0.1]                 # sig_5
 ]
 
-ar_params = [ # Override?
-    sgt.ar_from_timescale(8, 20, 5),    # sig_1: EDA tonic (very slow)
-    sgt.ar_from_timescale(3, 20, 3),    # sig_2: EDA phasic
-    sgt.ar_from_timescale(4, 20, 4),    # sig_3: pupil
-    sgt.ar_from_timescale(2, 20, 6),    # sig_4: HRV oscillatory
-    sgt.ar_from_timescale(5, 20, 3)     # sig_5
+ar_params = [
+    sgt.ar_from_timescale(8, 20, 5),   # slow tonic
+    sgt.ar_from_timescale(3, 20, 3),   # phasic
+    sgt.ar_from_timescale(4, 20, 4),
+    sgt.ar_from_timescale(2, 20, 6),
+    sgt.ar_from_timescale(5, 20, 3)
 ]
 
 
 
+#%% Define events
+event_defs = {
+    "eID_1": {
+        "criteria": sgt.event_criteria_mean,
+        "sigs": ["sig_1"],
+        #"params": {"thresh": 0.7, "mode": "gt"}
+        "params": {"thresh": 0.78, "mode": "gt"}
+    },
+    "eID_2": {
+        "criteria": sgt.event_criteria_std,
+        "sigs": ["sig_2"],
+        #"params": {"thresh": 0.15}
+        "params": {"thresh": 0.33}
+    },
+    "eID_3": {
+        "criteria": sgt.event_criteria_fft_band,
+        "sigs": ["sig_4"],
+        #"params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.01}
+        "params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.014}
+    },
+    "eID_4": {
+        "criteria": sgt.event_criteria_peaks,
+        "sigs": ["sig_3"],
+        #"params": {"min_peaks": 3}
+        "params": {"min_peaks": 42}
+    },
+    "eID_5": {
+        "criteria": sgt.event_criteria_mean,
+        "sigs": ["sig_1"],
+        #"params": {"thresh": 0.3, "mode": "lt"}
+        "params": {"thresh": 0.22, "mode": "lt"}
+    }
+}
 
 
-#%% Generate signals with predefined values above
+#%% Generate signals
 #sigs_X_df = sgt.generate_signals_A1(
 #    N=5,
 #    f_0=20,
@@ -50,124 +80,47 @@ ar_params = [ # Override?
 #)
 
 sigs_X_df = sgt.generate_signals_Ap(
-    N=5, # Number of signals
-    f_0=20, # Sampling frequency
-    T=300, # Time in seconds
+    N=5,
+    f_0=20,
+    T=300,
     mu_std=mu_std,
-    ar_params=ar_params, 
+    ar_params=ar_params,
     seed=42
 )
-
-if save_Q:
-    sigs_X_df.to_excel(data_path + 'sigs_X_df.xlsx')
-
-
-#%% Generate events upon signals
-# sigs_X_df:
-# 	time_t	eID
-# 0	246.6	eID_4
-# 1	246.7	eID_4
-# 2	246.75	eID_4
-sigs_X_df = pd.read_excel(data_path + 'sigs_X_df.xlsx')
-
-#%% Analyse events
-event_defs = {
-    "eID_1": {
-        "criteria": sgt.event_criteria_std, # event trigger based on signal variability
-        "sigs": ["sig_1"],
-        "params": {"thresh": 0.15}
-    }
-}
-
-events_X_df = sgt.generate_events(
-    sigs_X_df, 
-    f_0=20, 
-    window_s=5, 
-    hop_len_s=5, 
-    event_defs=event_defs,
-    min_duration_s=1.0,
-    max_duration_s=7.0
-)
-
-print(events_X_df)
-
-sgt.plot_sigs(
-    sigs_X_df,
-    events_X_df,
-    t_int=[1, 300],
-    sigs_lst=["sig_1"],
-    events_lst=["eID_1"]
-)
-
-
-#%% Define & generate events
-event_defs = {
-    # "eID_1": {
-    #     "criteria": sgt.event_criteria_mean, # criteria to detect the event
-    #     "sigs": ["sig_1"],
-    #     #"params": {"thresh": 0.7, "mode": "gt"}
-    #     "params": {"thresh": 0.9 }
-    # },
-    "eID_1": {
-        "criteria": sgt.event_criteria_mean, # event trigger based on signal variability
-        "sigs": ["sig_1"],
-        "params": {"thresh": 0.54}
-    },
-    "eID_2": {
-        "criteria": sgt.event_criteria_std,
-        "sigs": ["sig_1"],
-        #"params": {"thresh": 0.15}
-        "params": {"thresh": 0.13}
-    },
-    "eID_3": {
-        "criteria": sgt.event_criteria_fft_band,
-        "sigs": ["sig_1"],
-         "params": {"f_0": 10, "band": (0.1, 0.4), "thresh": 0.02}
-    }
-    # "eID_4": {
-    #     "criteria": sgt.event_criteria_std, # event trigger based on signal variability
-    #     "sigs": ["sig_3"],
-    #     "params": {"thresh": 0.25}
-    # },
-    # "eID_5": {
-    #     "criteria": sgt.event_criteria_mean,
-    #     "sigs": ["sig_1"],
-    #     #"params": {"thresh": 0.3, "mode": "lt"}
-    #     "params": {"thresh": 0.5, "mode": "gt"}
-    # }
-}
 
 events_X_df = sgt.generate_events(
     sigs_X_df,
     f_0=20,
     window_s=5,
-    hop_len_s=3,
-    event_defs=event_defs,
-    min_duration_s=1.0,
-    max_duration_s=7.0
+    event_defs=event_defs
 )
 
-print("Event counts by ID:")
-print(events_X_df['eID'].value_counts().sort_index())
-print(f"\nTotal events: {len(events_X_df)}")
-print("\nFirst few events:")
-print(events_X_df)
+
+
+
+
+
+
+#%% Test generated events
+
+stats = sgt.basic_event_stats(events_X_df)
+#stats
+
+
 
 #%% Store it
-if save_Q:
-    events_X_df.to_excel(data_path + 'events_X_df.xlsx')
-
-
+data_path = 'GenData/'
+sigs_X_df.to_excel(data_path + 'sigs_X_2_df.xlsx')
+events_X_df.to_excel(data_path + 'events_X_2_df.xlsx')
 
 
 #%% Plot it
 sgt.plot_sigs(
     sigs_X_df,
     events_X_df,
-    t_int=[1, 50],
-    sigs_lst=["sig_1"],
-    events_lst=["eID_1", "eID_2", "eID_3"],
-    event_defs=event_defs
+    t_int=[1, 300],
+    sigs_lst=["sig_1","sig_2", "sig_3", "sig_4", "sig_5"],
+    events_lst=["eID_1","eID_2", "eID_3","eID_4", "eID_5"]
 )
 
 # %%
