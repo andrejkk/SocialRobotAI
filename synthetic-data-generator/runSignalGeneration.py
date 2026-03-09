@@ -109,7 +109,7 @@ stats = sgt.basic_event_stats(events_X_df)
 
 
 #%% Store it
-data_path = '../GenData/'
+data_path = 'GenData/'
 sigs_X_df.to_excel(data_path + 'sigs_X_2_df.xlsx')
 events_X_df.to_excel(data_path + 'events_X_2_df.xlsx')
 
