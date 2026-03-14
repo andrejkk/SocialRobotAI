@@ -32,8 +32,10 @@ Instantaneous Event Evaluation (Tolerance-Based):
   
   Implementation: Instantaneous events are expanded to [time - τ, time + τ],
   then evaluated using standard interval logic.
-
 """
+
+DATA_PATH = '../GenData'
+
 
 
 def expand_instantaneous_events(events_df, tolerance=0.5):
@@ -272,7 +274,7 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
     }
 
 
-def plot_signals_with_events(sigs_df, gt_events_df, pred_events_df, t_int=[1, 50], sigs_lst=None, event_defs=None, output_path='GenData/events_evaluation_plot.png', window_size_s=60):
+def plot_signals_with_events(sigs_df, gt_events_df, pred_events_df, t_int=[1, 50], sigs_lst=None, event_defs=None, output_path=f'{DATA_PATH}/events_evaluation_plot.png', window_size_s=60):
     """
     Plot signals with both ground truth and predicted events overlaid.
     Creates subplots with 60-second windows for each signal.
@@ -395,8 +397,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate predicted events against ground truth events')
     parser.add_argument('gt_file', help='Path to ground truth events xlsx file')
     parser.add_argument('pred_file', help='Path to predicted events xlsx file')
-    parser.add_argument('--signals-file', default='GenData/sigs_X_df.xlsx', help='Path to signals xlsx file (default: GenData/sigs_X_df.xlsx)')
-    parser.add_argument('--output', default='GenData/events_evaluation_plot.png', help='Output path for the plot (default: GenData/events_evaluation_plot.png)')
+    parser.add_argument('--signals-file', default=f'{DATA_PATH}/sigs_df.xlsx', help=f'Path to signals xlsx file (default: {DATA_PATH}/sigs_X_df.xlsx)')
+    parser.add_argument('--output', default=f'{DATA_PATH}/events_evaluation_plot.png', help=f'Output path for the plot (default: {DATA_PATH}/events_evaluation_plot.png)')
     parser.add_argument('--instantaneous-tolerance', type=float, default=0.5, help='Tolerance window in seconds for instantaneous events (default: 0.5s). Instantaneous events are expanded to [time - tolerance, time + tolerance]')
     parser.add_argument('--eval-start-time', type=float, default=None, help='Start time for evaluation in seconds (e.g., train/test split point). If not provided, uses min time_start from predictions (default: None)')
     
@@ -415,9 +417,9 @@ if __name__ == "__main__":
         print("  - Instantaneous events: time_start == time_end (one timestamp, evaluated with tolerance window)")
         print("\nExamples:")
         print("  # Basic evaluation:")
-        print("  python evaluation.py GenData/events_X_df.xlsx GenData/predictions.xlsx")
+        print(f"  python evaluation.py {DATA_PATH}/events_X_df.xlsx {DATA_PATH}/predictions.xlsx")
         print("\n  # Specify tolerance for instantaneous events (default 0.5s):")
-        print("  python evaluation.py GenData/events_X_df.xlsx GenData/predictions.xlsx --instantaneous-tolerance 1.0")
+        print(f"  python evaluation.py {DATA_PATH}/events_X_df.xlsx {DATA_PATH}/predictions.xlsx --instantaneous-tolerance 1.0")
         exit(1)
     
     # Load ground truth events
@@ -485,16 +487,18 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Visualization: Signals with Ground Truth Events")
     print("=" * 60)
-    try:
-        sigs_X_df = pd.read_excel(args.signals_file)
-        plot_signals_with_events(
-            sigs_X_df,
-            gt_events_df,
-            pred_events_df,
-            t_int=[sigs_X_df['time_s'].min(), sigs_X_df['time_s'].max()],
-            sigs_lst=None,
-            event_defs=None,
-            output_path=args.output
-        )
-    except FileNotFoundError:
-        print(f"Warning: Signals file not found at {args.signals_file}. Skipping visualization.")
+
+    sigs_df = pd.read_excel(args.signals_file)
+    print(sigs_df)
+    plot_signals_with_events(
+        sigs_df,
+        gt_events_df,
+        pred_events_df,
+        t_int=[sigs_df['time_s'].min(), sigs_df['time_s'].max()],
+        sigs_lst=None,
+        event_defs=None,
+        output_path=args.output
+    )
+    # try:
+    # except FileNotFoundError:
+    #     print(f"Warning: Signals file not found at {args.signals_file}. Skipping visualization.")

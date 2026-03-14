@@ -4,6 +4,7 @@ from sklearn.model_selection import StratifiedKFold
 import argparse
 from pathlib import Path
 
+DATA_PATH = '../GenData'
 
 def _compute_class_stats(events_df, label):
     """Return a DataFrame with per-class statistics for one split."""
@@ -65,7 +66,7 @@ def _save_fold_statistics(train_events, validation_events, all_events, fold, out
     return summary_df, combined
 
 
-def create_train_validation_splits(sigs_file, events_file, output_dir='GenData/splits', n_splits=5):
+def create_train_validation_splits(sigs_file, events_file, output_dir=f'{DATA_PATH}/splits', n_splits=5):
     """
     Create temporal train/validation splits for signals and events.
     

@@ -7,6 +7,7 @@ import importlib
 import signal_generation_tools as sgt
 importlib.reload(sgt)
 
+DATA_PATH = '../GenData/'
 
 #%% Define signals
 mu_std = [
@@ -41,13 +42,13 @@ event_defs = {
         "criteria": sgt.event_criteria_mean,
         "sigs": ["sig_1"],
         #"params": {"thresh": 0.7, "mode": "gt"}
-        "params": {"thresh": 0.78, "mode": "gt"}
+        "params": {"thresh": 0.65, "mode": "gt"}
     },
     "eID_2": {
         "criteria": sgt.event_criteria_std,
         "sigs": ["sig_2"],
         #"params": {"thresh": 0.15}
-        "params": {"thresh": 0.33}
+        "params": {"thresh": 0.29}
     },
     "eID_3": {
         "criteria": sgt.event_criteria_fft_band,
@@ -65,7 +66,7 @@ event_defs = {
         "criteria": sgt.event_criteria_mean,
         "sigs": ["sig_1"],
         #"params": {"thresh": 0.3, "mode": "lt"}
-        "params": {"thresh": 0.22, "mode": "lt"}
+        "params": {"thresh": 0.35, "mode": "lt"}
     }
 }
 
@@ -95,6 +96,9 @@ events_X_df = sgt.generate_events(
     event_defs=event_defs
 )
 
+# Convert point-based events to interval-based events
+events_X_df = sgt.events_point_to_interval(events_X_df)
+
 
 
 
@@ -104,14 +108,13 @@ events_X_df = sgt.generate_events(
 #%% Test generated events
 
 stats = sgt.basic_event_stats(events_X_df)
-#stats
+stats
 
 
 
 #%% Store it
-data_path = 'GenData/'
-sigs_X_df.to_excel(data_path + 'sigs_X_2_df.xlsx')
-events_X_df.to_excel(data_path + 'events_X_2_df.xlsx')
+sigs_X_df.to_excel(DATA_PATH + 'sigs_df.xlsx')
+events_X_df.to_excel(DATA_PATH + 'events_gt_df.xlsx')
 
 
 #%% Plot it

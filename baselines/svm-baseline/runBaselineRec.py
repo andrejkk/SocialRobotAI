@@ -15,12 +15,12 @@ import matplotlib.pyplot as plt
 # 1 — Load data
 # ===================================================
 
-PATH = '../../GenData/'
-SIG_FILE = "sigs_X_2_df.xlsx"
+DATA_PATH = '../../GenData/'
+SIG_FILE = "sigs_df.xlsx"
 EVENT_FILE = "events_gt_old_format_df.xlsx"
 
-sigs_df = pd.read_excel(PATH + SIG_FILE)
-events_df = pd.read_excel(PATH + EVENT_FILE)
+sigs_df = pd.read_excel(DATA_PATH + SIG_FILE)
+events_df = pd.read_excel(DATA_PATH + EVENT_FILE)
 
 sigs_df = sigs_df.sort_values("time_s").reset_index(drop=True)
 events_df = events_df.sort_values("time_s").reset_index(drop=True)
@@ -102,6 +102,7 @@ def build_dataset(sigs, events, cfg):
             times.append(t)
         t += cfg["time_step"]
 
+    print(len(y))
     return np.array(X), np.array(y), np.array(times)
 
 
