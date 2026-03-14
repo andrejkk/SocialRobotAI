@@ -20,12 +20,12 @@
   - correct data to be as start_time, end_time ✅
   - test evaluation ✅
   - check evaluation with long events and single events (start_time == end_time) ✅
-  - micro macro averaging matrics, test and add more events to the test
+  - micro macro averaging matrics, test and add more events to the test ✅
+  - add folding ✅
   - binary classification
   - evaluate on different train, test, validation splits
-  - add folding ✅
 
-- SVM
+- SVM - check if result is the same as before
 - Find and test on another DB
 - Try with Luka's signals when ready
 - generalize scripts to take N number of signals

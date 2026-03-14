@@ -1,0 +1,25 @@
+I am implementing a svm prediction algorithm that predicts events on some signals.
+My data structure first looked like this. I had events marked as timestamps like this:
+11 99.85 eID_5
+12 99.9 eID_5
+13 99.95 eID_5
+14 153.65 eID_2
+15 153.7 eID_2
+16 247.4 eID_4
+17 247.85 eID_4
+18 248 eID_4
+
+This structure is used in runBaselineRec.py script (my old script for predictions). And the algorithm then predicts events in the same data format.
+Now my data changed so that I no longer have timestamp for each event, but rather intervals:
+
+time_start	time_end	eID
+0 99.3 99.95 eID_5
+1 153.65 153.7 eID_2
+2 247.4 248.15 eID_4
+
+This structure is passed to svm.py file as ground truth. 
+I converted my old file format for events (ground truth) to new one (with intervals), so that event times are the same, 
+just passed as intervals to the algorithm. 
+Now I am wondering why I am getting way worse results. 
+F1 score of old approach is 0.2, while with new approach only around 0.02. 
+I had to refactor how features are computed because of these data changes: now features are extracted at midpoint of interval.
