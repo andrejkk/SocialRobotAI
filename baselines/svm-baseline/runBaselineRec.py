@@ -15,12 +15,12 @@ import matplotlib.pyplot as plt
 # 1 — Load data
 # ===================================================
 
-PATH = '../GenData/'
-SIG_FILE = "sigs_X_2_df.xlsx"
-EVENT_FILE = "events_X_2_df.xlsx"
+DATA_PATH = '../../GenData/'
+SIG_FILE = "sigs_df.xlsx"
+EVENT_FILE = "events_gt_old_format_df.xlsx"
 
-sigs_df = pd.read_excel(PATH + SIG_FILE)
-events_df = pd.read_excel(PATH + EVENT_FILE)
+sigs_df = pd.read_excel(DATA_PATH + SIG_FILE)
+events_df = pd.read_excel(DATA_PATH + EVENT_FILE)
 
 sigs_df = sigs_df.sort_values("time_s").reset_index(drop=True)
 events_df = events_df.sort_values("time_s").reset_index(drop=True)
@@ -102,6 +102,7 @@ def build_dataset(sigs, events, cfg):
             times.append(t)
         t += cfg["time_step"]
 
+    print(len(y))
     return np.array(X), np.array(y), np.array(times)
 
 
@@ -112,7 +113,7 @@ def build_dataset(sigs, events, cfg):
 
 X, y, times = build_dataset(sigs_df, events_df, config)
 
-pd.DataFrame(X).to_csv("train_features.csv", index=False)
+pd.DataFrame(X).to_excel("train_features.xlsx", index=False)
 
 #%% ===================================================
 # 5 — Classifier
@@ -191,6 +192,7 @@ else:
 clf.fit(X,y)
 
 detected_times = []
+detected_events = []
 t = sigs_df.time_s.min()
 
 while t <= sigs_df.time_s.max():
@@ -198,9 +200,11 @@ while t <= sigs_df.time_s.max():
     pred = clf.predict([f])[0]
     if pred!="no_event":
         detected_times.append(t)
+        detected_events.append(pred)
     t+=config["time_step"]
 
 detected_times = np.array(detected_times)
+detected_events = np.array(detected_events)
 
 #%% ===================================================
 # 8 — Event-level evaluation (tolerance)
@@ -231,8 +235,8 @@ print("Event eval (Tol): P=",prec,"R=",rec,"F1=",f1)
 # 9 — Save + Plots
 # ===================================================
 
-pd.DataFrame({"true":events_df.time_s}).to_csv("true_events.csv",index=False)
-pd.DataFrame({"detected":detected_times}).to_csv("detected_events.csv",index=False)
+pd.DataFrame({"true":events_df.time_s}).to_excel("old-format/true_events.xlsx",index=False)
+pd.DataFrame({"time":detected_times, "event":detected_events}).to_excel("old-format/detected_events.xlsx",index=False)
 
 plt.figure()
 plt.plot(*roc_curve(y!="no_event", 1-clf.predict_proba(X)[:,list(clf.classes_).index("no_event")])[:2])

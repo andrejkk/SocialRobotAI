@@ -1,0 +1,14 @@
+{
+  "signals": ["sig_1", "sig_2", "sig_3"],
+
+  "features": [
+    { "fun": "mean", "lag": 2.0 },
+    { "fun": "std", "lag": 2.0 },
+    { "fun": "peaks", "lag": 2.0 },
+    { "fun": "fft_band", "lag": 3.0, "fmin": 0.1, "fmax": 2.0 }
+  ],
+
+  "time_step": 0.5,
+  "no_event_ratio": 1.0,
+  "event_tolerance": 1.0
+}
