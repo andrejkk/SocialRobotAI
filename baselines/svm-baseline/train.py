@@ -1,5 +1,7 @@
 #%% Imports
 import argparse
+import joblib
+import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -28,28 +30,11 @@ sigs_df = sigs_df.sort_values("time_s").reset_index(drop=True)
 events_df = events_df.sort_values("time_start").reset_index(drop=True)
 
 #%% ===================================================
-# 2 — Configurable parameters
-# signals — which columns to extract features from
-# features — which feature functions to compute (mean, std, peaks, FFT) and their lag windows
-# time_step — sampling interval for building no-event samples
-# no_event_ratio — class balance: ratio of negative to positive samples
-# event_tolerance — time window (seconds) for matching detected events to ground truth
+# 2 — Load config from JSON
 # ===================================================
 
-config = {
-    "signals": ["sig_1", "sig_2", "sig_3"],
-
-    "features": [
-        {"fun": "mean",   "lag": 2.0},
-        {"fun": "std",    "lag": 2.0},
-        {"fun": "peaks",  "lag": 2.0},
-        {"fun": "fft_band", "lag": 3.0, "fmin": 0.1, "fmax": 2.0},
-    ],
-
-    "time_step": 0.5,
-    "no_event_ratio": 1.0,
-    "event_tolerance": 1.0,
-}
+with open("config.json", "r") as f:
+    config = json.load(f)
 
 #%% ===================================================
 # 3 — Feature computation helpers
@@ -129,11 +114,6 @@ def build_dataset(sigs, events, cfg):
             y.append("no_event")
             times.append(t)
         t += cfg["time_step"]
-
-    print(f"Event samples: {np.sum(np.array(y) != 'no_event')}")
-    print(f"No-event samples: {np.sum(np.array(y) == 'no_event')}")
-    print(f"Total samples: {len(y)}")
-    print(y)
 
     return np.array(X), np.array(y), np.array(times)
 
@@ -223,13 +203,22 @@ clf = Pipeline([
 
 clf.fit(X,y)
 
+# Save the model
+joblib.dump(clf, 'model.pkl')
+print(f"Model saved to model.pkl")
+
+# Save class mapping for reference
+np.save("classes.npy", clf.named_steps['svm'].classes_)
+
 detected_events = []  # list of (time, eID) tuples
 t = sigs_df.time_s.min()
 
 while t <= sigs_df.time_s.max():
     f = features_at_time(sigs_df, t, config)
+    proba = clf.predict_proba([f])
+    max_prob = np.max(proba)
     pred = clf.predict([f])[0]
-    if pred != "no_event":
+    if pred != "no_event" and max_prob > 0.7:  # confidence threshold
         detected_events.append((t, pred))
     t += config["time_step"]
 

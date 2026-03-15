@@ -1,5 +1,6 @@
 #%% Imports
 import pandas as pd
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 import importlib
@@ -7,7 +8,7 @@ import importlib
 import signal_generation_tools as sgt
 importlib.reload(sgt)
 
-DATA_PATH = '../GenData/'
+DATA_PATH = '../'
 
 #%% Define signals
 mu_std = [
@@ -35,64 +36,31 @@ ar_params = [
 ]
 
 
+#%% Import config and define events
 
-#%% Define events
-event_defs = {
-    "eID_1": {
-        "criteria": sgt.event_criteria_mean,
-        "sigs": ["sig_1"],
-        #"params": {"thresh": 0.7, "mode": "gt"}
-        "params": {"thresh": 0.65, "mode": "gt"}
-    },
-    "eID_2": {
-        "criteria": sgt.event_criteria_std,
-        "sigs": ["sig_2"],
-        #"params": {"thresh": 0.15}
-        "params": {"thresh": 0.29}
-    },
-    "eID_3": {
-        "criteria": sgt.event_criteria_fft_band,
-        "sigs": ["sig_4"],
-        #"params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.01}
-        "params": {"f_0": 20, "band": (0.1, 0.4), "thresh": 0.014}
-    },
-    "eID_4": {
-        "criteria": sgt.event_criteria_peaks,
-        "sigs": ["sig_3"],
-        #"params": {"min_peaks": 3}
-        "params": {"min_peaks": 42}
-    },
-    "eID_5": {
-        "criteria": sgt.event_criteria_mean,
-        "sigs": ["sig_1"],
-        #"params": {"thresh": 0.3, "mode": "lt"}
-        "params": {"thresh": 0.35, "mode": "lt"}
-    }
-}
+with open("config.json", "r") as f1:
+    config = json.load(f1)
 
+with open("event-defs.json", "r") as f2:
+    event_defs = json.load(f2)
 
+print(config)
+print(event_defs)
 #%% Generate signals
-#sigs_X_df = sgt.generate_signals_A1(
-#    N=5,
-#    f_0=20,
-#    T=300,
-#    lag_s=[6, 3, 4, 2, 5],
-#    mu_std=[[0.5,0.1],[0.0,0.1],[3.0,0.2],[0.0,0.05],[1.0,0.1]]
-#)
 
 sigs_X_df = sgt.generate_signals_Ap(
-    N=5,
-    f_0=20,
-    T=300,
+    N=config["N"],
+    f_0=config["f0"],
+    T=config["T"],
     mu_std=mu_std,
     ar_params=ar_params,
-    seed=42
+    seed=config["seed"]
 )
 
 events_X_df = sgt.generate_events(
     sigs_X_df,
-    f_0=20,
-    window_s=5,
+    f_0=config["f0"],
+    window_s=config["window_s"],
     event_defs=event_defs
 )
 
@@ -113,15 +81,15 @@ stats
 
 
 #%% Store it
-sigs_X_df.to_excel(DATA_PATH + 'sigs_df.xlsx')
-events_X_df.to_excel(DATA_PATH + 'events_gt_df.xlsx')
+sigs_X_df.to_excel(DATA_PATH + 'sigs_df.xlsx', index=False)
+events_X_df.to_excel(DATA_PATH + 'events_gt_df.xlsx', index=False)
 
 
 #%% Plot it
 sgt.plot_sigs(
     sigs_X_df,
     events_X_df,
-    t_int=[1, 300],
+    t_int=[1, config["T"]],
     sigs_lst=["sig_1","sig_2", "sig_3", "sig_4", "sig_5"],
     events_lst=["eID_1","eID_2", "eID_3","eID_4", "eID_5"]
 )

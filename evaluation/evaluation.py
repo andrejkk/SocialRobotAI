@@ -186,10 +186,13 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
                 pair_recall = tp / (tp + fn) if (tp + fn) > 0 else 0
                 pair_f1 = 2 * pair_precision * pair_recall / (pair_precision + pair_recall) if (pair_precision + pair_recall) > 0 else 0
                 
-                print(f"  Match found for GT interval [{gt_start:.2f}-{gt_end:.2f}]s")
-                print(f"    Pred interval: [{pred_start:.2f}-{pred_end:.2f}]s")
-                print(f"    TP: {tp:.4f}s, FP: {fp:.4f}s, FN: {fn:.4f}s")
-                print(f"    Precision: {pair_precision:.4f}, Recall: {pair_recall:.4f}, F1: {pair_f1:.4f}")
+                # print(f"  Match found for GT interval [{gt_start:.2f}-{gt_end:.2f}]s (duration: {gt_duration:.4f}s)")
+                # print(f"    Pred interval: [{pred_start:.2f}-{pred_end:.2f}]s (duration: {pred_duration:.4f}s)")
+                # print(f"    Overlap interval: [{overlap_start:.2f}-{overlap_end:.2f}]s")
+                # print(f"    TP (overlap):           {tp:.4f}s")
+                # print(f"    FP (pred outside GT):   {fp:.4f}s  (pred_duration {pred_duration:.4f}s - overlap {tp:.4f}s)")
+                # print(f"    FN (GT not covered):    {fn:.4f}s  (gt_duration {gt_duration:.4f}s - overlap {tp:.4f}s)")
+                # print(f"    Precision: {pair_precision:.4f}, Recall: {pair_recall:.4f}, F1: {pair_f1:.4f}")
                 
                 # Store comparison
                 comparisons.append({
@@ -489,7 +492,6 @@ if __name__ == "__main__":
     print("=" * 60)
 
     sigs_df = pd.read_excel(args.signals_file)
-    print(sigs_df)
     plot_signals_with_events(
         sigs_df,
         gt_events_df,
@@ -499,6 +501,3 @@ if __name__ == "__main__":
         event_defs=None,
         output_path=args.output
     )
-    # try:
-    # except FileNotFoundError:
-    #     print(f"Warning: Signals file not found at {args.signals_file}. Skipping visualization.")

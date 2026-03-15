@@ -23,10 +23,13 @@
   - micro macro averaging matrics, test and add more events to the test ✅
   - add folding ✅
   - binary classification
-  - evaluate on different train, test, validation splits
 
-- fix SVM, test with other generated data
-- correct visualisation: Warning: Signals file not found at GenData/sigs_X_df.xlsx. Skipping visualization.
+## 15.3.
+
+- fix SVM, test with other generated data ✅
+- export feature computation function to a single file
+- evaluate on different train, test, validation splits
+
 - Find and test on another DB
 - Try with Luka's signals when ready
 - generalize scripts to take N number of signals

@@ -113,6 +113,15 @@ def event_criteria_peaks(sig, min_peaks):
     return len(peaks) >= min_peaks
 
 
+# Mapping from criteria names to functions
+CRITERIA_MAPPING = {
+    "mean": event_criteria_mean,
+    "std": event_criteria_std,
+    "fft_band": event_criteria_fft_band,
+    "peaks": event_criteria_peaks
+}
+
+
 def generate_events(
     sigs_X_df,
     f_0,
@@ -121,7 +130,9 @@ def generate_events(
 ):
     """
     event_defs = dict of:
-    eID -> dict(criteria_fn, sigs, params)
+    eID -> dict(criteria, sigs, params) where criteria is a string key
+    
+    The criteria string is mapped to the corresponding function using CRITERIA_MAPPING.
     """
     events = []
     win = int(window_s * f_0)
@@ -130,12 +141,15 @@ def generate_events(
         t = sigs_X_df.loc[t_idx, "time_s"]
 
         for eID, edef in event_defs.items():
+            # Map criteria string to function
+            criteria_fn = CRITERIA_MAPPING[edef["criteria"]]
+            
             sig_data = [
                 sigs_X_df.loc[t_idx-win:t_idx, s].values
                 for s in edef["sigs"]
             ]
 
-            if edef["criteria"](*sig_data, **edef["params"]):
+            if criteria_fn(*sig_data, **edef["params"]):
                 events.append({"time_s": t, "eID": eID})
 
     return pd.DataFrame(events)
