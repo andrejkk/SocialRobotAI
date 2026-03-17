@@ -137,67 +137,6 @@ clf = Pipeline([
 ])
 
 #%% ===================================================
-# 6 — Time based cross validation
-# ===================================================
-
-# tscv = TimeSeriesSplit(n_splits=config["n_splits"])
-# f1s, aucs = [], []
-
-# for fold, (train_idx, test_idx) in enumerate(tscv.split(X), 1):
-
-#     X_train, X_test = X[train_idx], X[test_idx]
-#     y_train, y_test = y[train_idx], y[test_idx]
-
-#     # --- Skip fold if training has only one class ---
-#     train_classes = np.unique(y_train)
-#     if len(train_classes) < 2:
-#         print(f"Fold {fold}: skipped (only one class in training)")
-#         continue
-
-#     clf.fit(X_train, y_train)
-#     y_pred = clf.predict(X_test)
-
-#     # --- Multiclass F1 ---
-#     f1 = f1_score(y_test, y_pred, average="macro")
-#     f1s.append(f1)
-
-#     # --- Binary event vs no_event AUC ---
-#     classes = list(clf.classes_)
-
-#     if (
-#         "no_event" in classes and
-#         len(np.unique(y_test)) > 1
-#     ):
-#         prob = clf.predict_proba(X_test)
-#         no_event_idx = classes.index("no_event")
-
-#         prob_event = 1 - prob[:, no_event_idx]
-#         y_binary = (y_test != "no_event").astype(int)
-
-#         fpr, tpr, _ = roc_curve(y_binary, prob_event)
-#         fold_auc = auc(fpr, tpr)
-#         aucs.append(fold_auc)
-
-#         print(f"Fold {fold}: F1={f1:.3f}, AUC={fold_auc:.3f}")
-
-#     else:
-#         print(f"Fold {fold}: F1={f1:.3f}, AUC skipped (test single class)")
-
-# # --- Summary ---
-# print("\nOverall results")
-
-# if f1s:
-#     print("Mean F1:", np.mean(f1s))
-# else:
-#     print("F1 could not be computed")
-
-# if aucs:
-#     print("Mean AUC:", np.mean(aucs))
-# else:
-#     print("AUC could not be computed")
-
-
-#%% ===================================================
 # 7 — Real time detection simulation
 # ===================================================
 

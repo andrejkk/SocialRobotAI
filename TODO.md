@@ -30,7 +30,16 @@
 - export feature computation function to a single file
 - evaluate on different train, test, validation splits
 
-- Find and test on another DB
+- Find and test on another DB: fix config, NaNs
+
+valid_mask = ~np.isnan(X).any(axis=1)
+X = X[valid_mask]
+y = y[valid_mask]
+times = times[valid_mask]
+
+print(f"Removed {(~valid_mask).sum()} samples with NaN values")
+print(f"Training set size: {len(X)}")
+
 - Try with Luka's signals when ready
 - generalize scripts to take N number of signals
 

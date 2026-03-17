@@ -1,2 +1,7 @@
 venv
 .env
+
+OpportunityUCIDataset/dataset
+OpportunityUCIDataset/doc
+OpportunityUCIDataset/prepared-data
+OpportunityUCIDataset/scripts

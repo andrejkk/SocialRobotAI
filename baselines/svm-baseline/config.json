@@ -1,5 +1,5 @@
 {
-  "signals": ["sig_1", "sig_2", "sig_3"],
+  "signals": ["sig_2", "sig_3", "sig_4"],
 
   "features": [
     { "fun": "mean", "lag": 2.0 },

@@ -11,3 +11,4 @@ moviepy
 scikit-learn
 librosa
 openpyxl
+torch
