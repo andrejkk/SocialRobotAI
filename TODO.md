@@ -27,15 +27,16 @@
 ## 15.3.
 
 - fix SVM, test with other generated data ✅
-- export feature computation function to a single file
 - evaluate on different train, test, validation splits
 
-- Find and test on another DB: fix config, NaNs, update readme with db links
-- Try with Luka's signals when ready
-- generalize scripts to take N number of signals
-- configure train.py to take all signals for learning data
-- analyze data with Orange
+- make k-fold automatic
+- update readme with db links
+- generalize scripts to take N number of signals ✅
+- configure train.py to take all signals for learning data ✅
 - save evaluation results of generated and public data to file
+- check sampling frequencies
+- analyze data with Orange
+- Try with Luka's signals when ready
 
 ## K-Fold Cross-Validation
 

@@ -29,6 +29,10 @@ events_df = pd.read_excel(args.events_file)
 sigs_df = sigs_df.sort_values("time_s").reset_index(drop=True)
 events_df = events_df.sort_values("time_start").reset_index(drop=True)
 
+# Derive signal columns automatically from the loaded file
+sig_cols = [c for c in sigs_df.columns if c.startswith("sig_")]
+print(f"Using {len(sig_cols)} signal columns: {sig_cols[:5]}{'...' if len(sig_cols) > 5 else ''}")
+
 #%% ===================================================
 # 2 — Load config from JSON
 # ===================================================
@@ -64,7 +68,7 @@ def compute_feature(x, feat, fs):
 def features_at_time(df, t, config):
     fs = 1 / np.mean(np.diff(df.time_s))
     feats = []
-    for sig in config["signals"]:
+    for sig in sig_cols:
         for f in config["features"]:
             w = get_window(df, t, f["lag"])
             feats.append(compute_feature(w[sig].values if len(w) else np.array([]), f, fs))
@@ -75,7 +79,7 @@ def features_over_interval(df, time_start, time_end, config):
     w = df[(df.time_s >= time_start) & (df.time_s <= time_end)]
     fs = 1 / np.mean(np.diff(df.time_s))
     feats = []
-    for sig in config["signals"]:
+    for sig in sig_cols:
         for f in config["features"]:
             feats.append(compute_feature(w[sig].values if len(w) else np.array([]), f, fs))
     return np.array(feats)

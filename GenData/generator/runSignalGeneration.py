@@ -67,6 +67,12 @@ events_X_df = sgt.generate_events(
 # Convert point-based events to interval-based events
 events_X_df = sgt.events_point_to_interval(events_X_df)
 
+# Remove intervals that are too short or too close to each other
+events_X_df = sgt.filter_close_intervals(
+    events_X_df,
+    min_gap_s=1.0, # minimum gap between two successive intervals (seconds)
+)
+
 
 
 

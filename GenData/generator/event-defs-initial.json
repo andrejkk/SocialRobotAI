@@ -12,7 +12,7 @@
   "eID_3": {
     "criteria": "fft_band",
     "sigs": ["sig_4"],
-    "params": { "f_0": 20, "band": [0.1, 0.4], "thresh": 0.01 }
+    "params": { "f_0": 20, "band": [0.1, 0.4], "thresh": 0.014 }
   },
   "eID_4": {
     "criteria": "peaks",
@@ -22,6 +22,6 @@
   "eID_5": {
     "criteria": "mean",
     "sigs": ["sig_1"],
-    "params": { "thresh": 0.35, "mode": "lt" }
+    "params": { "thresh": 0.42, "mode": "lt" }
   }
 }
