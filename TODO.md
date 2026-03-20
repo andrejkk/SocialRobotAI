@@ -30,18 +30,12 @@
 - export feature computation function to a single file
 - evaluate on different train, test, validation splits
 
-- Find and test on another DB: fix config, NaNs
-
-valid_mask = ~np.isnan(X).any(axis=1)
-X = X[valid_mask]
-y = y[valid_mask]
-times = times[valid_mask]
-
-print(f"Removed {(~valid_mask).sum()} samples with NaN values")
-print(f"Training set size: {len(X)}")
-
+- Find and test on another DB: fix config, NaNs, update readme with db links
 - Try with Luka's signals when ready
 - generalize scripts to take N number of signals
+- configure train.py to take all signals for learning data
+- analyze data with Orange
+- save evaluation results of generated and public data to file
 
 ## K-Fold Cross-Validation
 

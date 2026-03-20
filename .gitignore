@@ -5,3 +5,7 @@ OpportunityUCIDataset/dataset
 OpportunityUCIDataset/doc
 OpportunityUCIDataset/prepared-data
 OpportunityUCIDataset/scripts
+
+baselines/svm-baseline/model.pkl
+
+*.xlsx#

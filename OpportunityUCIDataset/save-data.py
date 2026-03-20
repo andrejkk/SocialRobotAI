@@ -42,6 +42,23 @@ for i, col_num in enumerate(SIGNAL_COLUMNS_1BASED):
     sigs_data[f'sig_{col_num}'] = df.iloc[:, SIGNAL_COLUMNS[i]].values
 sigs_df = pd.DataFrame(sigs_data)
 
+# Handle NaN values:
+# Forward-fill sensor readings (last known value is held until next valid reading).
+# This preserves temporal continuity which is required for window-based feature extraction.
+sig_cols = [c for c in sigs_df.columns if c != 'time_s']
+sigs_df[sig_cols] = sigs_df[sig_cols].ffill()
+
+# Drop any rows that are still NaN (leading rows before first valid reading)
+rows_before = len(sigs_df)
+sigs_df = sigs_df.dropna(subset=sig_cols).reset_index(drop=True)
+rows_dropped = rows_before - len(sigs_df)
+if rows_dropped > 0:
+    print(f"Dropped {rows_dropped} leading rows with no valid sensor data")
+
+# Recalculate valid time range after cleaning
+valid_time_min = sigs_df['time_s'].min()
+valid_time_max = sigs_df['time_s'].max()
+
 # Extract LL_Right_Arm label (column 248, which is index 247)
 ll_right_arm = df.iloc[:, TARGET_LABEL].values
 
@@ -56,23 +73,28 @@ for idx in range(len(ll_right_arm)):
         if current_value is not None and current_value != 0:  # Skip 0 labels (null/no activity)
             time_start = time_s.iloc[start_idx]
             time_end = time_s.iloc[idx - 1]
-            events_list.append({
-                'time_start': time_start,
-                'time_end': time_end,
-                'eID': int(current_value)
-            })
+            # Clip to valid signal time range
+            time_start = max(time_start, valid_time_min)
+            time_end = min(time_end, valid_time_max)
+            if time_start < time_end:
+                events_list.append({
+                    'time_start': time_start,
+                    'time_end': time_end,
+                    'eID': int(current_value)
+                })
         current_value = ll_right_arm[idx]
         start_idx = idx
 
 # Don't forget the last interval
 if current_value is not None and current_value != 0:
-    time_start = time_s.iloc[start_idx]
-    time_end = time_s.iloc[-1]
-    events_list.append({
-        'time_start': time_start,
-        'time_end': time_end,
-        'eID': int(current_value)
-    })
+    time_start = max(time_s.iloc[start_idx], valid_time_min)
+    time_end = min(time_s.iloc[-1], valid_time_max)
+    if time_start < time_end:
+        events_list.append({
+            'time_start': time_start,
+            'time_end': time_end,
+            'eID': int(current_value)
+        })
 
 events_df = pd.DataFrame(events_list)
 
