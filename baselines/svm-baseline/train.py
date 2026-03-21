@@ -5,14 +5,9 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from scipy.signal import find_peaks
-from scipy.fft import rfft, rfftfreq
-from sklearn.svm import SVC
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import f1_score, roc_curve, auc
-from sklearn.model_selection import TimeSeriesSplit
 import matplotlib.pyplot as plt
+from svm_utils import (features_at_time, features_over_interval,
+                       build_dataset, create_model, run_inference)
 
 #%% ===================================================
 # 1 — Load data
@@ -40,86 +35,7 @@ print(f"Using {len(sig_cols)} signal columns: {sig_cols[:5]}{'...' if len(sig_co
 with open("config.json", "r") as f:
     config = json.load(f)
 
-#%% ===================================================
-# 3 — Feature computation helpers
-# ===================================================
 
-def get_window(df, t, lag): return df[(df.time_s >= t - lag) & (df.time_s <= t)]
-
-def feat_mean(x): return np.mean(x)
-def feat_std(x): return np.std(x)
-def feat_peaks(x): return len(find_peaks(x)[0])
-
-def feat_fft_band(x, fs, fmin, fmax):
-    if len(x) < 2: return 0
-    yf = np.abs(rfft(x))
-    xf = rfftfreq(len(x), 1/fs)
-    mask = (xf >= fmin) & (xf <= fmax)
-    return np.sum(yf[mask])
-
-def compute_feature(x, feat, fs):
-    f = feat["fun"]
-    if f == "mean": return feat_mean(x)
-    if f == "std": return feat_std(x)
-    if f == "peaks": return feat_peaks(x)
-    if f == "fft_band": return feat_fft_band(x, fs, feat["fmin"], feat["fmax"])
-    raise ValueError(f"Unknown feature {f}")
-
-def features_at_time(df, t, config):
-    fs = 1 / np.mean(np.diff(df.time_s))
-    feats = []
-    for sig in sig_cols:
-        for f in config["features"]:
-            w = get_window(df, t, f["lag"])
-            feats.append(compute_feature(w[sig].values if len(w) else np.array([]), f, fs))
-    return np.array(feats)
-
-def features_over_interval(df, time_start, time_end, config):
-    # Get signals within event interval
-    w = df[(df.time_s >= time_start) & (df.time_s <= time_end)]
-    fs = 1 / np.mean(np.diff(df.time_s))
-    feats = []
-    for sig in sig_cols:
-        for f in config["features"]:
-            feats.append(compute_feature(w[sig].values if len(w) else np.array([]), f, fs))
-    return np.array(feats)
-
-def build_dataset(sigs, events, cfg):
-    X, y, times = [], [], []
-
-    # event samples: use fine-grained sampling within event intervals (0.1s)
-    # to maximize training samples per event, then use coarser sampling for no-events
-    event_sampling_step = 0.1  # 0.1s within events vs 0.5s for no-events
-    
-    for i, row in events.iterrows():
-        # Sample at 0.1s intervals within each event interval
-        interval_times = np.arange(row.time_start, row.time_end + event_sampling_step/2, event_sampling_step)
-        for t in interval_times:
-            X.append(features_at_time(sigs, t, cfg))
-            y.append(row.eID)
-            times.append(t)
-
-    # no-event samples
-    n_no = int(len(X) * cfg["no_event_ratio"])
-    
-    # Build list of event intervals for tolerance check
-    event_intervals = list(zip(events.time_start.values, events.time_end.values))
-    t = sigs.time_s.min()
-
-    while len(times) < len(X) + n_no and t < sigs.time_s.max():
-        # Check if t is far enough from any event interval
-        is_far = all(
-            (t < start - cfg["event_tolerance"]) or 
-            (t > end + cfg["event_tolerance"])
-            for start, end in event_intervals
-        )
-        if is_far:
-            X.append(features_at_time(sigs, t, cfg))
-            y.append("no_event")
-            times.append(t)
-        t += cfg["time_step"]
-
-    return np.array(X), np.array(y), np.array(times)
 
 
 #%% ===================================================
@@ -127,7 +43,7 @@ def build_dataset(sigs, events, cfg):
 # ===================================================
 
 
-X, y, times = build_dataset(sigs_df, events_df, config)
+X, y, times = build_dataset(sigs_df, events_df, config, sig_cols)
 
 pd.DataFrame(X).to_excel("train_features.xlsx", index=False)
 
@@ -135,16 +51,13 @@ pd.DataFrame(X).to_excel("train_features.xlsx", index=False)
 # 5 — Classifier
 # ===================================================
 
-clf = Pipeline([
-    ("scaler", StandardScaler()),
-    ("svm", SVC(probability=True, class_weight='balanced'))
-])
+clf = create_model()
 
 #%% ===================================================
 # 7 — Real time detection simulation
 # ===================================================
 
-clf.fit(X,y)
+clf.fit(X, y)
 
 # Save the model
 joblib.dump(clf, 'model.pkl')
@@ -153,36 +66,7 @@ print(f"Model saved to model.pkl")
 # Save class mapping for reference
 np.save("classes.npy", clf.named_steps['svm'].classes_)
 
-detected_events = []  # list of (time, eID) tuples
-t = sigs_df.time_s.min()
-
-while t <= sigs_df.time_s.max():
-    f = features_at_time(sigs_df, t, config)
-    proba = clf.predict_proba([f])
-    max_prob = np.max(proba)
-    pred = clf.predict([f])[0]
-    if pred != "no_event" and max_prob > 0.7:  # confidence threshold
-        detected_events.append((t, pred))
-    t += config["time_step"]
-
-# Convert point detections to intervals by merging consecutive detections of same eID
-detected_intervals = []
-if len(detected_events) > 0:
-    current_start, current_eid = detected_events[0]
-    current_end = detected_events[0][0]
-    
-    for t, eid in detected_events[1:]:
-        if eid == current_eid:
-            # Same event, extend interval
-            current_end = t
-        else:
-            # Different event, save current interval and start new one
-            detected_intervals.append((current_start, current_end, current_eid))
-            current_start, current_eid = t, eid
-            current_end = t
-    
-    # Save last interval
-    detected_intervals.append((current_start, current_end, current_eid))
+detected_intervals = run_inference(sigs_df, clf, config, sig_cols)
 
 #%% ===================================================
 # 8 — Event-level evaluation (tolerance)
