@@ -1,6 +1,4 @@
 {
-  "signals": ["sig_1", "sig_2", "sig_3"],
-
   "features": [
     { "fun": "mean", "lag": 2.0 },
     { "fun": "std", "lag": 2.0 },

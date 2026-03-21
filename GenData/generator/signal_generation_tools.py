@@ -290,6 +290,47 @@ def basic_event_stats(events_X_df):
     return stats
 
 
+def filter_close_intervals(events_df, min_gap_s=1.0):
+    """
+    Remove intervals that are too close to each other or too short.
+
+    Iterates through intervals sorted by time_start and greedily keeps an
+    interval only if:
+      - the gap between its time_start and the previous kept interval's
+        time_end is >= min_gap_s.
+
+    Args:
+        events_df:      DataFrame with columns 'time_start', 'time_end', 'eID'
+        min_gap_s:      Minimum required gap (seconds) between consecutive kept
+                        intervals (end of previous → start of next).
+
+    Returns:
+        Filtered DataFrame (same columns), reset index.
+    """
+    if len(events_df) == 0:
+        return events_df.copy()
+
+    df = events_df.sort_values('time_start').reset_index(drop=True)
+
+    kept = []
+    last_end = -np.inf
+
+    for _, row in df.iterrows():
+        duration = row['time_end'] - row['time_start']
+        gap = row['time_start'] - last_end
+
+        if gap >= min_gap_s:
+            kept.append(row)
+            last_end = row['time_end']
+
+    filtered = pd.DataFrame(kept).reset_index(drop=True)
+    n_removed = len(df) - len(filtered)
+    if n_removed > 0:
+        print(f"filter_close_intervals: removed {n_removed} interval(s) "
+              f"(min_gap={min_gap_s}s")
+    return filtered
+
+
 def events_point_to_interval(events_df):
     """
     Convert point-based events (time_s, eID) to interval-based events (time_start, time_end, eID).

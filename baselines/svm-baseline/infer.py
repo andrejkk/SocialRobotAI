@@ -43,6 +43,9 @@ sigs_df = sigs_df.sort_values("time_s").reset_index(drop=True)
 if events_df is not None:
     events_df = events_df.sort_values("time_start").reset_index(drop=True)
 
+# Derive signal columns automatically from the loaded file
+sig_cols = [c for c in sigs_df.columns if c.startswith("sig_")]
+
 #%% ===================================================
 # 2 — Feature computation helpers (same as training)
 # ===================================================
@@ -82,7 +85,7 @@ def compute_feature(x, feat, fs):
 def features_at_time(df, t, config):
     fs = 1 / np.mean(np.diff(df.time_s))
     feats = []
-    for sig in config["signals"]:
+    for sig in sig_cols:
         for f in config["features"]:
             w = get_window(df, t, f["lag"])
             feats.append(compute_feature(w[sig].values if len(w) else np.array([]), f, fs))
