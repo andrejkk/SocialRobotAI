@@ -29,7 +29,8 @@
 - fix SVM, test with other generated data ✅
 - evaluate on different train, test, validation splits
 
-- make k-fold automatic: how does k-fold split data (70/30?), compare evaluations
+- make k-fold automatic: how does k-fold split data (70/30?), compare evaluations ✅
+- remove only first 5 signals after testingf
 - save evaluation results of generated and public data to file
 - analyze data with Orange
 - update readme with db links

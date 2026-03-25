@@ -65,7 +65,7 @@ def run_k_fold_cross_evaluation(
     with open(CONFIG_PATH) as f:
         config = json.load(f)
 
-    sig_cols = [c for c in sigs_df.columns if c.startswith('sig_')]
+    sig_cols = [c for c in sigs_df.columns if c.startswith('sig_')][:5]
     print(f"Loaded {len(sigs_df)} signal rows, {len(events_df)} events, "
           f"{len(sig_cols)} signal columns")
 
@@ -120,6 +120,9 @@ def run_k_fold_cross_evaluation(
         pred_df = pd.DataFrame(pred_list, columns=['time_start', 'time_end', 'eID'])
         print(f"  Detected {len(pred_df)} event intervals")
 
+        # Save predicted events
+        pred_df.to_excel(output_path / f'fold_{fold}_predicted_events.xlsx', index=False)
+
         # ---- Evaluate ----
         result = evaluate_events(val_events, pred_df)
 
@@ -151,6 +154,27 @@ def run_k_fold_cross_evaluation(
               f"R={result['macro_recall']:.3f}  F1={result['macro_f1']:.3f}")
         print(f"  Micro  P={result['micro_precision']:.3f}  "
               f"R={result['micro_recall']:.3f}  F1={result['micro_f1']:.3f}")
+
+        for eid in sorted(result['eID_metrics'].keys(), key=str):
+            m = result['eID_metrics'][eid]
+            tp, fp, fn = m['tp'], m['fp'], m['fn']
+            prec = tp / (tp + fp) if (tp + fp) > 0 else 0
+            rec  = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1   = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
+            
+            # Add per-event row to report
+            per_event_row = {
+                'fold': f"{fold} - {eid}",
+                'eID': eid,
+                'tp_s': tp,
+                'fp_s': fp,
+                'fn_s': fn,
+                'macro_precision': prec,
+                'macro_recall': rec,
+                'macro_f1': f1,
+            }
+            report_rows.append(per_event_row)
+        print("="*60)
 
     # ---- Save report ----
     report_df = pd.DataFrame(report_rows)
