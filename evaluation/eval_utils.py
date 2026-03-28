@@ -146,6 +146,107 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
 
 
 # ---------------------------------------------------------------------------
+# Timing-difference metrics
+# ---------------------------------------------------------------------------
+
+def compute_timing_differences(comparisons):
+    """
+    From the list of matched comparisons, compute start-time and end-time
+    differences (predicted − ground truth) and label-match flags.
+
+    Returns a list of dicts with keys:
+      eID, gt_start, gt_end, pred_start, pred_end,
+      start_diff, end_diff, label_match
+    """
+    diffs = []
+    for c in comparisons:
+        diffs.append({
+            'eID':        c['eID'],
+            'gt_start':   c['gt_start'],
+            'gt_end':     c['gt_end'],
+            'pred_start': c['pred_start'],
+            'pred_end':   c['pred_end'],
+            'start_diff': c['pred_start'] - c['gt_start'],
+            'end_diff':   c['pred_end']   - c['gt_end'],
+            'label_match': True,  # matching is done per-eID
+        })
+    return diffs
+
+
+def print_timing_differences(diffs):
+    """Print per-pair and aggregate timing-difference metrics."""
+    if not diffs:
+        print("\nNo matched event pairs — timing-difference metrics unavailable.")
+        return
+
+    start_diffs = np.array([d['start_diff'] for d in diffs])
+    end_diffs   = np.array([d['end_diff']   for d in diffs])
+
+    print("\n" + "=" * 60)
+    print("Timing-Difference Metrics  (predicted − ground truth)")
+    print("=" * 60)
+
+    for d in diffs:
+        print(f"  eID={d['eID']}  "
+              f"GT[{d['gt_start']:.2f}–{d['gt_end']:.2f}]  "
+              f"Pred[{d['pred_start']:.2f}–{d['pred_end']:.2f}]  "
+              f"Δstart={d['start_diff']:+.4f}s  "
+              f"Δend={d['end_diff']:+.4f}s  "
+              f"label_match={d['label_match']}")
+
+    print(f"\n  Matched pairs: {len(diffs)}")
+    print(f"  Start-time differences  — mean: {np.mean(start_diffs):+.4f}s  "
+          f"std: {np.std(start_diffs):.4f}s  "
+          f"min(abs): {np.min(np.abs(start_diffs)):.4f}s  max(abs): {np.max(np.abs(start_diffs)):.4f}s")
+    print(f"  End-time   differences  — mean: {np.mean(end_diffs):+.4f}s  "
+          f"std: {np.std(end_diffs):.4f}s  "
+          f"min(abs): {np.min(np.abs(end_diffs)):.4f}s  max(abs): {np.max(np.abs(end_diffs)):.4f}s")
+
+
+def plot_timing_histograms(diffs, output_path='timing_diff_histogram.png'):
+    """Plot histograms of start-time and end-time differences and save to PNG."""
+    if not diffs:
+        print("No matched pairs — skipping timing-difference histogram.")
+        return
+
+    start_diffs = np.array([d['start_diff'] for d in diffs])
+    end_diffs   = np.array([d['end_diff']   for d in diffs])
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Start-time differences
+    s_mean, s_std = np.mean(start_diffs), np.std(start_diffs)
+    axes[0].hist(start_diffs, bins='auto', edgecolor='black', alpha=0.7)
+    axes[0].axvline(s_mean, color='red', linestyle='--',
+                    label=f'mean={s_mean:+.3f}s')
+    axes[0].axvspan(s_mean - s_std, s_mean + s_std, alpha=0.2, color='orange',
+                    label=f'±std={s_std:.3f}s')
+    axes[0].set_title('Start-Time Differences (pred − GT)')
+    axes[0].set_xlabel('Difference (s)')
+    axes[0].set_ylabel('Count')
+    axes[0].legend(fontsize=9)
+    axes[0].grid(True, alpha=0.3)
+
+    # End-time differences
+    e_mean, e_std = np.mean(end_diffs), np.std(end_diffs)
+    axes[1].hist(end_diffs, bins='auto', edgecolor='black', alpha=0.7)
+    axes[1].axvline(e_mean, color='red', linestyle='--',
+                    label=f'mean={e_mean:+.3f}s')
+    axes[1].axvspan(e_mean - e_std, e_mean + e_std, alpha=0.2, color='orange',
+                    label=f'±std={e_std:.3f}s')
+    axes[1].set_title('End-Time Differences (pred − GT)')
+    axes[1].set_xlabel('Difference (s)')
+    axes[1].set_ylabel('Count')
+    axes[1].legend(fontsize=9)
+    axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"Timing-difference histogram saved to {output_path}")
+    plt.close()
+
+
+# ---------------------------------------------------------------------------
 # Visualisation
 # ---------------------------------------------------------------------------
 

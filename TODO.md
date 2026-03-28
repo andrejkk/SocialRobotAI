@@ -30,14 +30,19 @@
 - evaluate on different train, test, validation splits
 
 - make k-fold automatic: how does k-fold split data (70/30?), compare evaluations ✅
-- remove only first 5 signals after testingf
-- save evaluation results of generated and public data to file
-- analyze data with Orange
-- update readme with db links
-- check sampling frequencies
-- Try with Luka's signals when ready
+- save evaluation results of generated and public data to file ✅
 - generalize scripts to take N number of signals ✅
 - configure train.py to take all signals for learning data ✅
+
+## 28.3.
+
+- implement end to end delays, compare start times and end times (+ label) ✅
+- histogram of differences, show std deviation ✅
+- merge to main branch
+- check sampling frequencies
+- update readme with db links
+- analyze data with Orange
+- Try with Luka's signals when ready
 
 ## K-Fold Cross-Validation
 
@@ -55,3 +60,9 @@ Steps:
    if the metrics dont look good, adjust hyperparameters and start over
 7. train the model on all the training data
 8. test it on the test set as usual
+
+## Standardni odklon
+
+- je odklon podatkov od aritmetične sredine
+- varianca je povprečje kvadratov odmikov podatkov od srednje vrednosti
+- standarni odklon je varianca pod korenom
