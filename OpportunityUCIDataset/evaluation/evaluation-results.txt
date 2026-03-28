@@ -1,0 +1,45 @@
+True Positive (TP):  20.8670 seconds
+False Positive (FP): 57.1330 seconds
+False Negative (FN): 46.4620 seconds
+
+============================================================
+MACRO-Averaged Metrics (weighted by event duration):
+============================================================
+Precision: 0.2675 (TP / (TP + FP))
+Recall:    0.3099 (TP / (TP + FN))
+F1-Score:  0.2872
+
+============================================================
+MICRO-Averaged Metrics (equal weight to each event type):
+============================================================
+Precision: 0.4019
+Recall:    0.2377
+F1-Score:  0.2987
+
+============================================================
+Per-Event-Type Metrics:
+============================================================
+
+404:
+  TP: 4.3000s, FP: 0.7000s, FN: 6.7680s
+  Precision: 0.8600, Recall: 0.3885, F1: 0.5352
+
+405:
+  TP: 0.8680s, FP: 33.6320s, FN: 8.2970s
+  Precision: 0.0252, Recall: 0.0947, F1: 0.0398
+
+406:
+  TP: 1.2660s, FP: 0.2340s, FN: 4.0660s
+  Precision: 0.8440, Recall: 0.2374, F1: 0.3706
+
+408:
+  TP: 0.0000s, FP: 0.0000s, FN: 6.5000s
+  Precision: 0.0000, Recall: 0.0000, F1: 0.0000
+
+412:
+  TP: 2.1330s, FP: 6.3670s, FN: 6.8650s
+  Precision: 0.2509, Recall: 0.2371, F1: 0.2438
+
+413:
+  TP: 12.3000s, FP: 16.2000s, FN: 13.9660s
+  Precision: 0.4316, Recall: 0.4683, F1: 0.4492

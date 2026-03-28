@@ -30,14 +30,16 @@
 - evaluate on different train, test, validation splits
 
 - make k-fold automatic: how does k-fold split data (70/30?), compare evaluations ✅
-- remove only first 5 signals after testingf
-- save evaluation results of generated and public data to file
-- analyze data with Orange
-- update readme with db links
-- check sampling frequencies
-- Try with Luka's signals when ready
+- save evaluation results of generated and public data to file ✅
 - generalize scripts to take N number of signals ✅
 - configure train.py to take all signals for learning data ✅
+
+## 28.3.
+
+- analyze data with Orange
+- check sampling frequencies
+- update readme with db links
+- Try with Luka's signals when ready
 
 ## K-Fold Cross-Validation
 
