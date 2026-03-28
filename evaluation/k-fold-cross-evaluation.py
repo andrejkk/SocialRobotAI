@@ -65,7 +65,7 @@ def run_k_fold_cross_evaluation(
     with open(CONFIG_PATH) as f:
         config = json.load(f)
 
-    sig_cols = [c for c in sigs_df.columns if c.startswith('sig_')][:5]
+    sig_cols = [c for c in sigs_df.columns if c.startswith('sig_')]
     print(f"Loaded {len(sigs_df)} signal rows, {len(events_df)} events, "
           f"{len(sig_cols)} signal columns")
 

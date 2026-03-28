@@ -36,9 +36,12 @@
 
 ## 28.3.
 
-- analyze data with Orange
+- implement end to end delays, compare start times and end times (+ label) ✅
+- histogram of differences, show std deviation ✅
+- merge to main branch
 - check sampling frequencies
 - update readme with db links
+- analyze data with Orange
 - Try with Luka's signals when ready
 
 ## K-Fold Cross-Validation
@@ -57,3 +60,9 @@ Steps:
    if the metrics dont look good, adjust hyperparameters and start over
 7. train the model on all the training data
 8. test it on the test set as usual
+
+## Standardni odklon
+
+- je odklon podatkov od aritmetične sredine
+- varianca je povprečje kvadratov odmikov podatkov od srednje vrednosti
+- standarni odklon je varianca pod korenom

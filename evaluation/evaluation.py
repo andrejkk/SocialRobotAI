@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse
+import argparse    
+from eval_utils import compute_timing_differences, print_timing_differences, plot_timing_histograms
+
 
 """
 True Positive (TP) = Correctly overlapped time between real and simulated segments
@@ -133,8 +135,8 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
         eid_fp = 0.0
         eid_fn = 0.0
         
-        print(f"\n--- Processing eID: {eid} ---")
-        print(f"  GT events: {len(gt_events)}, Predicted events: {len(pred_events)}")
+        # print(f"\n--- Processing eID: {eid} ---")
+        # print(f"  GT events: {len(gt_events)}, Predicted events: {len(pred_events)}")
         
         # For each GT event, find the best matching predicted event
         used_pred = set()
@@ -219,7 +221,7 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
             else:
                 # GT event not matched - entire GT duration is false negative
                 fn_unmatched = gt_end - gt_start
-                print(f"  NO match for GT interval [{gt_start:.2f}-{gt_end:.2f}]s - All FN: {fn_unmatched:.4f}s")
+                # print(f"  NO match for GT interval [{gt_start:.2f}-{gt_end:.2f}]s - All FN: {fn_unmatched:.4f}s")
                 total_fn += fn_unmatched
                 eid_fn += fn_unmatched
         
@@ -227,7 +229,7 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
         for pred_idx, pred_event in pred_events.iterrows():
             if pred_idx not in used_pred:
                 fp_unmatched = pred_event['time_end'] - pred_event['time_start']
-                print(f"  Unmatched predicted interval [{pred_event['time_start']:.2f}-{pred_event['time_end']:.2f}]s - All FP: {fp_unmatched:.4f}s")
+                # print(f"  Unmatched predicted interval [{pred_event['time_start']:.2f}-{pred_event['time_end']:.2f}]s - All FP: {fp_unmatched:.4f}s")
                 total_fp += fp_unmatched
                 eid_fp += fp_unmatched
         
@@ -486,6 +488,15 @@ if __name__ == "__main__":
         print(f"  TP: {eid_tp:.4f}s, FP: {eid_fp:.4f}s, FN: {eid_fn:.4f}s")
         print(f"  Precision: {eid_prec:.4f}, Recall: {eid_rec:.4f}, F1: {eid_f1:.4f}")
     
+    # Timing-difference metrics
+    diffs = compute_timing_differences(result['comparisons'])
+    print_timing_differences(diffs)
+
+    # Build histogram output path next to the main plot
+    hist_output = args.output.rsplit('.', 1)
+    hist_output_path = hist_output[0] + '_timing_diff_histogram.png' if len(hist_output) > 1 else args.output + '_timing_diff_histogram.png'
+    plot_timing_histograms(diffs, output_path=hist_output_path)
+
     # Visualization: Load signals and plot with both event types
     print("=" * 60)
     print("Visualization: Signals with Ground Truth Events")

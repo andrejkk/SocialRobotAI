@@ -148,7 +148,6 @@ def _save_plots(train_events, test_events, all_events, output_path):
     legend_patches = [mpatches.Patch(color=color_map[c], label=str(c)) for c in classes]
     fig.legend(handles=legend_patches, title='eID', bbox_to_anchor=(1.01, 0.5), loc='center left')
     fig.tight_layout()
-    fig.savefig(plots_dir / 'event_timeline.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
 
     print(f"Plots saved to: {plots_dir}/")
