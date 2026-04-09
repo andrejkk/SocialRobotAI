@@ -91,7 +91,7 @@ class ProcessFrames:
             else:
                 x = y = w = h = emotion = None
 
-            # --- BUILD ROW ---
+            # --- ZGRADI ROW ---
             row = {
                 "time_s": time_s,
                 "emotion": emotion,
@@ -101,12 +101,10 @@ class ProcessFrames:
                 "face_h": h,
             }
 
-            # Populate pose landmarks into the row. Use actual frame dimensions
-            # and avoid the `for-else` pattern which was overwriting values.
             if pose_landmarks:
                 h_img, w_img, _ = currentframe.shape
                 for li, lm in enumerate(pose_landmarks):
-                    # convert normalized x,y to pixels using image size
+                    # norm x y to image size
                     row[f"pose_{li}_x"] = int(lm.x * w_img)
                     row[f"pose_{li}_y"] = int(lm.y * h_img)
                     row[f"pose_{li}_z"] = lm.z
