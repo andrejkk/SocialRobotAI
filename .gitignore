@@ -8,4 +8,4 @@ OpportunityUCIDataset/scripts
 
 baselines/svm-baseline/model.pkl
 
-*.xlsx#
+*.pyc
