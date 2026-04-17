@@ -1,10 +1,10 @@
-import torch
 import numpy as np
 import pandas as pd
-import os
 
 # Load the data file
-DATA_PATH = './dataset/S1-ADL1.dat'
+
+DATA_PATH = ''
+# DATA_PATH = './dataset/S1-ADL3.dat'
 
 MAX_ROWS = 50000      # limit for debugging
 TARGET_LABEL = 247 # 247 right arm (248 - 1 because we count from 0)
@@ -12,9 +12,9 @@ TARGET_LABEL = 247 # 247 right arm (248 - 1 because we count from 0)
 # Signal columns to include in the output
 # NOTE: Use 1-based column numbers from the .dat file description (Column 2, 3, 4, etc.)
 # They will be automatically converted to 0-based Python indices
-SIGNAL_COLUMNS_1BASED = [2,3,4,5,6,7,11,12,13,17,18,19,20,21,22,23,24,25,26,27,28,
-                         51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,
-                         119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134                 
+SIGNAL_COLUMNS_1BASED = [2,3,4,5,6,7,11,12,13,17,19,20,21,22,23,24,25,26,27,28,
+                         51,52,53,57,58,59,60,61,62,63,64,65,66,68,70,71,72,73,74,75,76,
+                         119,120,121,125,126,127,131,134
 ]
 
 # Convert to 0-based Python indices

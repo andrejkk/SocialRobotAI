@@ -13,7 +13,7 @@ _HERE = Path(__file__).parent
 sys.path.insert(0, str(_HERE.parent / 'baselines' / 'svm-baseline'))
 
 from svm_utils import build_dataset, create_model, run_inference
-from eval_utils  import evaluate_events, plot_signals_with_events
+from eval_utils  import evaluate_events, plot_signals_with_events, compute_timing_differences
 
 CONFIG_PATH = _HERE.parent / 'baselines' / 'svm-baseline' / 'config.json'
 
@@ -103,7 +103,8 @@ def run_k_fold_cross_evaluation(
 
         # ---- Train ----
         print("  Building training dataset...")
-        X, y, _ = build_dataset(train_sigs, train_events, config, sig_cols)
+        X, y, _ = build_dataset(train_sigs, train_events, config, sig_cols,
+                                exclude_events=events_df)
 
         valid = ~np.isnan(X).any(axis=1)
         X, y = X[valid], y[valid]
@@ -126,6 +127,25 @@ def run_k_fold_cross_evaluation(
         # ---- Evaluate ----
         result = evaluate_events(val_events, pred_df)
 
+        # ---- Timing differences ----
+        fold_diffs = compute_timing_differences(result['comparisons'])
+        if fold_diffs:
+            _start = np.array([d['start_diff'] for d in fold_diffs])
+            _end   = np.array([d['end_diff']   for d in fold_diffs])
+            timing_stats = {
+                'start_diff_mean':    float(np.mean(_start)),
+                'start_diff_min_abs': float(np.min(np.abs(_start))),
+                'start_diff_max_abs': float(np.max(np.abs(_start))),
+                'end_diff_mean':      float(np.mean(_end)),
+                'end_diff_min_abs':   float(np.min(np.abs(_end))),
+                'end_diff_max_abs':   float(np.max(np.abs(_end))),
+            }
+        else:
+            timing_stats = {
+                'start_diff_mean': None, 'start_diff_min_abs': None, 'start_diff_max_abs': None,
+                'end_diff_mean':   None, 'end_diff_min_abs':   None, 'end_diff_max_abs':   None,
+            }
+
         # ---- Plot ----
         plot_path = output_path / f'fold_{fold}_plot.png'
         plot_signals_with_events(
@@ -147,6 +167,7 @@ def run_k_fold_cross_evaluation(
             'micro_recall':     result['micro_recall'],
             'micro_f1':         result['micro_f1'],
             'plot_file':        plot_path.name,
+            **timing_stats,
         })
         report_rows.append(row)
 

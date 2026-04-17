@@ -182,17 +182,17 @@ def print_timing_differences(diffs):
     start_diffs = np.array([d['start_diff'] for d in diffs])
     end_diffs   = np.array([d['end_diff']   for d in diffs])
 
-    print("\n" + "=" * 60)
-    print("Timing-Difference Metrics  (predicted − ground truth)")
-    print("=" * 60)
+    # print("\n" + "=" * 60)
+    # print("Timing-Difference Metrics  (predicted − ground truth)")
+    # print("=" * 60)
 
-    for d in diffs:
-        print(f"  eID={d['eID']}  "
-              f"GT[{d['gt_start']:.2f}–{d['gt_end']:.2f}]  "
-              f"Pred[{d['pred_start']:.2f}–{d['pred_end']:.2f}]  "
-              f"Δstart={d['start_diff']:+.4f}s  "
-              f"Δend={d['end_diff']:+.4f}s  "
-              f"label_match={d['label_match']}")
+    # for d in diffs:
+    #     print(f"  eID={d['eID']}  "
+    #           f"GT[{d['gt_start']:.2f}–{d['gt_end']:.2f}]  "
+    #           f"Pred[{d['pred_start']:.2f}–{d['pred_end']:.2f}]  "
+    #           f"Δstart={d['start_diff']:+.4f}s  "
+    #           f"Δend={d['end_diff']:+.4f}s  "
+    #           f"label_match={d['label_match']}")
 
     print(f"\n  Matched pairs: {len(diffs)}")
     print(f"  Start-time differences  — mean: {np.mean(start_diffs):+.4f}s  "

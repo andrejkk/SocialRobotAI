@@ -1,3 +1,5 @@
+Results for S1-ADL1.dat:
+
 True Positive (TP):  20.8670 seconds
 False Positive (FP): 57.1330 seconds
 False Negative (FN): 46.4620 seconds
@@ -16,30 +18,146 @@ Precision: 0.4019
 Recall:    0.2377
 F1-Score:  0.2987
 
+
+
+
+
+
+Results for S1-ADL2.dat with confidence=0.7
+
 ============================================================
-Per-Event-Type Metrics:
+Evaluation: Ground Truth vs. Predicted Events (Temporal Overlap)
 ============================================================
+tolerance:  0.5
 
-404:
-  TP: 4.3000s, FP: 0.7000s, FN: 6.7680s
-  Precision: 0.8600, Recall: 0.3885, F1: 0.5352
+Filtering events by eval_start_time: 807.325s
+  GT events after filtering: 55
+  Predicted events after filtering: 17
+True Positive (TP):  8.2670 seconds
+False Positive (FP): 92.7330 seconds
+False Negative (FN): 60.7980 seconds
 
-405:
-  TP: 0.8680s, FP: 33.6320s, FN: 8.2970s
-  Precision: 0.0252, Recall: 0.0947, F1: 0.0398
+============================================================
+MACRO-Averaged Metrics (weighted by event duration):
+============================================================
+Precision: 0.0819 (TP / (TP + FP))
+Recall:    0.1197 (TP / (TP + FN))
+F1-Score:  0.0972
 
-406:
-  TP: 1.2660s, FP: 0.2340s, FN: 4.0660s
-  Precision: 0.8440, Recall: 0.2374, F1: 0.3706
+============================================================
+MICRO-Averaged Metrics (equal weight to each event type):
+============================================================
+Precision: 0.1143
+Recall:    0.1484
+F1-Score:  0.1291
 
-408:
-  TP: 0.0000s, FP: 0.0000s, FN: 6.5000s
-  Precision: 0.0000, Recall: 0.0000, F1: 0.0000
 
-412:
-  TP: 2.1330s, FP: 6.3670s, FN: 6.8650s
-  Precision: 0.2509, Recall: 0.2371, F1: 0.2438
+  Matched pairs: 8
+  Start-time differences  — mean: -1.1415s  std: 1.3099s  min(abs): 0.2000s  max(abs): 3.9990s
+  End-time   differences  — mean: +8.1753s  std: 19.5183s  min(abs): 0.0330s  max(abs): 59.6350s
+Timing-difference histogram saved to ../GenData/events_evaluation_plot_timing_diff_histogram.png
 
-413:
-  TP: 12.3000s, FP: 16.2000s, FN: 13.9660s
-  Precision: 0.4316, Recall: 0.4683, F1: 0.4492
+
+
+
+
+Results for S1-ADL2.dat with confidence=0.5
+
+============================================================
+Evaluation: Ground Truth vs. Predicted Events (Temporal Overlap)
+============================================================
+tolerance:  0.5
+
+Filtering events by eval_start_time: 805.825s
+  GT events after filtering: 55
+  Predicted events after filtering: 37
+True Positive (TP):  8.9340 seconds
+False Positive (FP): 56.5660 seconds
+False Negative (FN): 60.1310 seconds
+
+============================================================
+MACRO-Averaged Metrics (weighted by event duration):
+============================================================
+Precision: 0.1364 (TP / (TP + FP))
+Recall:    0.1294 (TP / (TP + FN))
+F1-Score:  0.1328
+
+============================================================
+MICRO-Averaged Metrics (equal weight to each event type):
+============================================================
+Precision: 0.1000
+Recall:    0.1704
+F1-Score:  0.1261
+
+
+  Matched pairs: 15
+  Start-time differences  — mean: -0.7039s  std: 1.3436s  min(abs): 0.0000s  max(abs): 3.9990s
+  End-time   differences  — mean: +0.4605s  std: 1.1903s  min(abs): 0.0330s  max(abs): 4.7330s
+Timing-difference histogram saved to ../GenData/events_evaluation_plot_timing_diff_histogram.png
+
+
+Results for S1-ADL3.dat with confidence=0.5
+
+
+============================================================
+Evaluation: Ground Truth vs. Predicted Events (Temporal Overlap)
+============================================================
+tolerance:  0.5
+
+Filtering events by eval_start_time: 810.325s
+  GT events after filtering: 58
+  Predicted events after filtering: 36
+True Positive (TP):  30.8050 seconds
+False Positive (FP): 106.1950 seconds
+False Negative (FN): 80.4930 seconds
+
+============================================================
+MACRO-Averaged Metrics (weighted by event duration):
+============================================================
+Precision: 0.2249 (TP / (TP + FP))
+Recall:    0.2768 (TP / (TP + FN))
+F1-Score:  0.2481
+
+============================================================
+MICRO-Averaged Metrics (equal weight to each event type):
+============================================================
+Precision: 0.2031
+Recall:    0.2115
+F1-Score:  0.2072
+
+
+
+Results for S1-ADL3.dat with confidence=0.2
+
+
+
+============================================================
+Evaluation: Ground Truth vs. Predicted Events (Temporal Overlap)
+============================================================
+tolerance:  0.5
+
+Filtering events by eval_start_time: 810.325s
+  GT events after filtering: 58
+  Predicted events after filtering: 47
+True Positive (TP):  43.0350 seconds
+False Positive (FP): 117.9650 seconds
+False Negative (FN): 68.2630 seconds
+
+============================================================
+MACRO-Averaged Metrics (weighted by event duration):
+============================================================
+Precision: 0.2673 (TP / (TP + FP))
+Recall:    0.3867 (TP / (TP + FN))
+F1-Score:  0.3161
+
+============================================================
+MICRO-Averaged Metrics (equal weight to each event type):
+============================================================
+Precision: 0.4310
+Recall:    0.3223
+F1-Score:  0.3688
+
+
+  Matched pairs: 28
+  Start-time differences  — mean: -0.2182s  std: 2.3490s  min(abs): 0.0000s  max(abs): 7.7650s
+  End-time   differences  — mean: +0.6091s  std: 1.8865s  min(abs): 0.0000s  max(abs): 6.4670s

@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse    
+import argparse
+from pathlib import Path
 from eval_utils import compute_timing_differences, print_timing_differences, plot_timing_histograms
 
 
@@ -402,13 +403,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate predicted events against ground truth events')
     parser.add_argument('gt_file', help='Path to ground truth events xlsx file')
     parser.add_argument('pred_file', help='Path to predicted events xlsx file')
+    parser.add_argument('output_dir', help='Directory to save evaluation report and plots')
     parser.add_argument('--signals-file', default=f'{DATA_PATH}/sigs_df.xlsx', help=f'Path to signals xlsx file (default: {DATA_PATH}/sigs_X_df.xlsx)')
-    parser.add_argument('--output', default=f'{DATA_PATH}/events_evaluation_plot.png', help=f'Output path for the plot (default: {DATA_PATH}/events_evaluation_plot.png)')
+    parser.add_argument('--output', default=None, help='Output path for the plot (default: <output_dir>/events_evaluation_plot.png)')
     parser.add_argument('--instantaneous-tolerance', type=float, default=0.5, help='Tolerance window in seconds for instantaneous events (default: 0.5s). Instantaneous events are expanded to [time - tolerance, time + tolerance]')
     parser.add_argument('--eval-start-time', type=float, default=None, help='Start time for evaluation in seconds (e.g., train/test split point). If not provided, uses min time_start from predictions (default: None)')
     
     args = parser.parse_args()
-    
+
+    report_dir = Path(args.output_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    if args.output is None:
+        args.output = str(report_dir / 'events_evaluation_plot.png')
+
     # Validate required arguments
     if not args.gt_file:
         parser.print_help()
@@ -472,21 +479,22 @@ if __name__ == "__main__":
     print(f"F1-Score:  {result['micro_f1']:.4f}\n")
     
     # Print per-eID metrics
-    print("=" * 60)
-    print("Per-Event-Type Metrics:")
-    print("=" * 60)
-    for eid, metrics in result['eID_metrics'].items():
-        eid_tp = metrics['tp']
-        eid_fp = metrics['fp']
-        eid_fn = metrics['fn']
+    # Uncomment to see per event stats
+    # print("=" * 60)
+    # print("Per-Event-Type Metrics:")
+    # print("=" * 60)
+    # for eid, metrics in result['eID_metrics'].items():
+    #     eid_tp = metrics['tp']
+    #     eid_fp = metrics['fp']
+    #     eid_fn = metrics['fn']
         
-        eid_prec = eid_tp / (eid_tp + eid_fp) if (eid_tp + eid_fp) > 0 else 0
-        eid_rec = eid_tp / (eid_tp + eid_fn) if (eid_tp + eid_fn) > 0 else 0
-        eid_f1 = 2 * eid_prec * eid_rec / (eid_prec + eid_rec) if (eid_prec + eid_rec) > 0 else 0
+    #     eid_prec = eid_tp / (eid_tp + eid_fp) if (eid_tp + eid_fp) > 0 else 0
+    #     eid_rec = eid_tp / (eid_tp + eid_fn) if (eid_tp + eid_fn) > 0 else 0
+    #     eid_f1 = 2 * eid_prec * eid_rec / (eid_prec + eid_rec) if (eid_prec + eid_rec) > 0 else 0
         
-        print(f"\n{eid}:")
-        print(f"  TP: {eid_tp:.4f}s, FP: {eid_fp:.4f}s, FN: {eid_fn:.4f}s")
-        print(f"  Precision: {eid_prec:.4f}, Recall: {eid_rec:.4f}, F1: {eid_f1:.4f}")
+    #     print(f"\n{eid}:")
+    #     print(f"  TP: {eid_tp:.4f}s, FP: {eid_fp:.4f}s, FN: {eid_fn:.4f}s")
+    #     print(f"  Precision: {eid_prec:.4f}, Recall: {eid_rec:.4f}, F1: {eid_f1:.4f}")
     
     # Timing-difference metrics
     diffs = compute_timing_differences(result['comparisons'])
@@ -496,6 +504,82 @@ if __name__ == "__main__":
     hist_output = args.output.rsplit('.', 1)
     hist_output_path = hist_output[0] + '_timing_diff_histogram.png' if len(hist_output) > 1 else args.output + '_timing_diff_histogram.png'
     plot_timing_histograms(diffs, output_path=hist_output_path)
+
+    # ---- Build evaluation report (same format as k-fold-cross-evaluation) ----
+    gt_report = gt_events_df.copy()
+    gt_report['duration'] = gt_report['time_end'] - gt_report['time_start']
+    counts = gt_report['eID'].value_counts()
+
+    def _imbalance_ratio(c):
+        return float('inf') if c.min() == 0 else round(c.max() / c.min(), 3)
+
+    # Compute timing-difference stats for the report
+    if diffs:
+        start_diffs = np.array([d['start_diff'] for d in diffs])
+        end_diffs   = np.array([d['end_diff']   for d in diffs])
+        timing_stats = {
+            'start_diff_mean':    float(np.mean(start_diffs)),
+            'start_diff_min_abs': float(np.min(np.abs(start_diffs))),
+            'start_diff_max_abs': float(np.max(np.abs(start_diffs))),
+            'end_diff_mean':      float(np.mean(end_diffs)),
+            'end_diff_min_abs':   float(np.min(np.abs(end_diffs))),
+            'end_diff_max_abs':   float(np.max(np.abs(end_diffs))),
+        }
+    else:
+        timing_stats = {
+            'start_diff_mean': None, 'start_diff_min_abs': None, 'start_diff_max_abs': None,
+            'end_diff_mean':   None, 'end_diff_min_abs':   None, 'end_diff_max_abs':   None,
+        }
+
+    report_rows = []
+
+    # Summary row (fold = 0)
+    summary_row = {
+        'fold':                   0,
+        'n_events':               len(gt_report),
+        'n_classes':              gt_report['eID'].nunique(),
+        'imbalance_ratio':        _imbalance_ratio(counts),
+        'majority_class':         counts.idxmax() if len(counts) > 0 else None,
+        'minority_class':         counts.idxmin() if len(counts) > 0 else None,
+        'time_start':             gt_report['time_start'].min(),
+        'time_end':               gt_report['time_end'].max(),
+        'duration_covered_s':     gt_report['time_end'].max() - gt_report['time_start'].min(),
+        'total_event_duration_s': gt_report['duration'].sum(),
+        'tp_s':                   result['tp'],
+        'fp_s':                   result['fp'],
+        'fn_s':                   result['fn'],
+        'macro_precision':        result['macro_precision'],
+        'macro_recall':           result['macro_recall'],
+        'macro_f1':               result['macro_f1'],
+        'micro_precision':        result['micro_precision'],
+        'micro_recall':           result['micro_recall'],
+        'micro_f1':               result['micro_f1'],
+        'plot_file':              Path(args.output).name,
+        **timing_stats,
+    }
+    report_rows.append(summary_row)
+
+    # Per-eID rows
+    for eid in sorted(result['eID_metrics'].keys(), key=str):
+        m = result['eID_metrics'][eid]
+        tp, fp, fn = m['tp'], m['fp'], m['fn']
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0
+        rec  = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1   = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
+        report_rows.append({
+            'fold':            f"0 - {eid}",
+            'eID':             eid,
+            'tp_s':            tp,
+            'fp_s':            fp,
+            'fn_s':            fn,
+            'macro_precision': prec,
+            'macro_recall':    rec,
+            'macro_f1':        f1,
+        })
+
+    report_path = report_dir / 'evaluation-report.xlsx'
+    pd.DataFrame(report_rows).to_excel(report_path, index=False)
+    print(f"\nEvaluation report saved to: {report_path}")
 
     # Visualization: Load signals and plot with both event types
     print("=" * 60)
