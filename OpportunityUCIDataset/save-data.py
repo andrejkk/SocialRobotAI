@@ -3,7 +3,7 @@ import pandas as pd
 
 # Load the data file
 
-DATA_PATH = ''
+DATA_PATH = './dataset/S1-ADL3.dat'
 # DATA_PATH = './dataset/S1-ADL3.dat'
 
 MAX_ROWS = 50000      # limit for debugging

@@ -42,6 +42,17 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
     gt_df   = gt_df.copy()
     pred_df = pred_df.copy()
 
+    # Normalize eID types to string, stripping ".0" from float-encoded integers
+    # (e.g. pandas reads integer Excel columns as float64: 405.0 → "405")
+    def _norm_eid(val):
+        try:
+            return str(int(float(val)))
+        except (ValueError, TypeError):
+            return str(val)
+
+    gt_df['eID']   = gt_df['eID'].map(_norm_eid)
+    pred_df['eID'] = pred_df['eID'].map(_norm_eid)
+
     gt_has_instant   = (gt_df['time_start']   == gt_df['time_end']).any()
     pred_has_instant = (pred_df['time_start'] == pred_df['time_end']).any()
 

@@ -107,7 +107,10 @@ def build_dataset(sigs, events, config, sig_cols):
         )
         for t in interval_times:
             X.append(features_at_time(sigs, t, config, sig_cols))
-            y.append(row.eID)
+            try:
+                y.append(str(int(float(row.eID))))
+            except (ValueError, TypeError):
+                y.append(str(row.eID))
             times.append(t)
 
     n_no = int(len(X) * config["no_event_ratio"])

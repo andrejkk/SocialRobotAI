@@ -545,6 +545,7 @@ if __name__ == "__main__":
         'time_end':               gt_report['time_end'].max(),
         'duration_covered_s':     gt_report['time_end'].max() - gt_report['time_start'].min(),
         'total_event_duration_s': gt_report['duration'].sum(),
+        'n_occurrences':          len(gt_report),
         'tp_s':                   result['tp'],
         'fp_s':                   result['fp'],
         'fn_s':                   result['fn'],
@@ -569,6 +570,7 @@ if __name__ == "__main__":
         report_rows.append({
             'fold':            f"0 - {eid}",
             'eID':             eid,
+            'n_occurrences':   int(counts.get(eid, 0)),
             'tp_s':            tp,
             'fp_s':            fp,
             'fn_s':            fn,

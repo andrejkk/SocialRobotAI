@@ -44,6 +44,7 @@ def _fold_stats(fold, events_df):
         'time_end':               df['time_end'].max(),
         'duration_covered_s':     df['time_end'].max() - df['time_start'].min(),
         'total_event_duration_s': df['duration'].sum(),
+        'n_occurrences':          len(df),
     }
 
 
@@ -103,8 +104,7 @@ def run_k_fold_cross_evaluation(
 
         # ---- Train ----
         print("  Building training dataset...")
-        X, y, _ = build_dataset(train_sigs, train_events, config, sig_cols,
-                                exclude_events=events_df)
+        X, y, _ = build_dataset(train_sigs, train_events, config, sig_cols)
 
         valid = ~np.isnan(X).any(axis=1)
         X, y = X[valid], y[valid]
@@ -187,6 +187,7 @@ def run_k_fold_cross_evaluation(
             per_event_row = {
                 'fold': f"{fold} - {eid}",
                 'eID': eid,
+                'n_occurrences': int(val_events['eID'].value_counts().get(eid, 0)),
                 'tp_s': tp,
                 'fp_s': fp,
                 'fn_s': fn,
