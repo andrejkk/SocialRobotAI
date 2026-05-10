@@ -1,6 +1,6 @@
 # Problem
 
-This project is a machine learning project for events recognition on time series (signals). SVM (support vector machine) classifier is used for recognition. Events can be instantaneous (time_start == time_end) or intervals (time_start < time_end).
+This project is a machine learning project for events recognition on time series (signals). SVM (support vector machine) classifier is used for recognition. Events can be instantaneous (time_start == time_end) or intervals.
 
 ## Example data for signals (defined in xlsx file):
 
