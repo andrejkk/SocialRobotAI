@@ -32,9 +32,13 @@ Gre za video posnetke, na katerih so osebe v interakciji z nekim sistemom in so 
 class ProcessFrames:
     def __init__(self, video_path, detection_interval=5):
         self.video_path = video_path
-        self.detection_interval = detection_interval
-        self.trackers = []  # tracker buffer
-        self.last_detected_boxes = []
+        self.detection_interval = detection_interval  # na vsake N frameov še enkrat poišče nove obraze, da se lahko trackeri posodobijo, če se osebe premikajo ali pridejo nove v frame
+        self.trackers = (
+            []
+        )  # tracker buffer, shrani vse trackerje, ki jih imamo trenutno aktivne (za vsako zaznano osebo)
+        self.last_detected_boxes = (
+            []
+        )  # buffer za ground truth bboxe, če dobim conf 0 gre čez celoten frame ?
 
     def get_iou(ground_truth, pred):
         gt_box_tensor = torch.tensor([ground_truth], dtype=torch.float32)
@@ -86,12 +90,11 @@ class ProcessFrames:
 
         mp_drawing = mp.solutions.drawing_utils
         mp_pose = mp.solutions.pose
-        pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-
+        # pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+        pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.4)
         # trackers = []
         # last_detected_boxes = []
 
-        ### Init frame counter and cv2 tracker for tracking detected faces across frames
         frameId = 0
         rows = []
 
@@ -112,7 +115,6 @@ class ProcessFrames:
             )
 
             time_s = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-
             # Process every 5 frames or if we have no trackers
             if frameId % self.detection_interval == 0 or not self.trackers:
                 detected_bboxes = df.faceDetection(currentframe)
@@ -146,7 +148,6 @@ class ProcessFrames:
 
                     print("Detection failed this frame; using last detected boxes.")
 
-            # ### Run detector only every N frames (or if we have no trackers)
             # detected_boxes = None
             # if frameId % self.detection_interval == 0 or not self.trackers:
             #     det_res = df.faceDetection(currentframe)
