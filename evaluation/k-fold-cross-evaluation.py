@@ -10,12 +10,23 @@ from sklearn.model_selection import StratifiedKFold
 # Resolve paths to shared utilities
 # -------------------------------------------------------------------
 _HERE = Path(__file__).parent
-sys.path.insert(0, str(_HERE.parent / 'baselines' / 'svm-baseline'))
-
-from svm_utils import build_dataset, create_model, run_inference
 from eval_utils  import evaluate_events, plot_signals_with_events, compute_timing_differences
 
-CONFIG_PATH = _HERE.parent / 'baselines' / 'svm-baseline' / 'config.json'
+
+def _load_baseline(baseline_name):
+    """Import baseline utilities and return (build_dataset, create_model, run_inference, config_path)."""
+    if baseline_name == 'svm':
+        sys.path.insert(0, str(_HERE.parent / 'baselines' / 'svm-baseline'))
+        from svm_utils import build_dataset, create_model, run_inference
+        config_path = _HERE.parent / 'baselines' / 'svm-baseline' / 'config.json'
+        return build_dataset, create_model, run_inference, config_path
+    elif baseline_name == 'rocket':
+        sys.path.insert(0, str(_HERE.parent / 'baselines' / 'rocket-baseline'))
+        from rocket_utils import build_dataset, create_model, run_inference
+        config_path = _HERE.parent / 'baselines' / 'rocket-baseline' / 'config.json'
+        return build_dataset, create_model, run_inference, config_path
+    else:
+        raise ValueError(f"Unknown baseline: {baseline_name}. Use 'svm' or 'rocket'.")
 
 
 # -------------------------------------------------------------------
@@ -59,11 +70,14 @@ def run_k_fold_cross_evaluation(
     n_splits=5,
     confidence_threshold=0.7,
     sig_buffer_s=5.0,
+    baseline='svm',
 ):
+    build_dataset, create_model, run_inference, config_path = _load_baseline(baseline)
+
     sigs_df   = pd.read_excel(sigs_file).sort_values('time_s').reset_index(drop=True)
     events_df = pd.read_excel(events_file).sort_values('time_start').reset_index(drop=True)
 
-    with open(CONFIG_PATH) as f:
+    with open(config_path) as f:
         config = json.load(f)
 
     sig_cols = [c for c in sigs_df.columns if c.startswith('sig_')]
@@ -106,17 +120,29 @@ def run_k_fold_cross_evaluation(
         print("  Building training dataset...")
         X, y, _ = build_dataset(train_sigs, train_events, config, sig_cols)
 
-        valid = ~np.isnan(X).any(axis=1)
+        # Remove NaN samples (windows extending before signal start)
+        if X.ndim == 2:
+            valid = ~np.isnan(X).any(axis=1)
+        else:
+            valid = ~np.isnan(X.reshape(X.shape[0], -1)).any(axis=1)
         X, y = X[valid], y[valid]
         print(f"  Training on {len(X)} samples "
               f"({(~valid).sum()} NaN samples discarded)")
 
-        clf = create_model()
-        clf.fit(X, y)
+        if baseline == 'rocket':
+            rocket, clf = create_model(num_kernels=config.get('num_kernels', 10000))
+            rocket.fit(X)
+            X_feat = rocket.transform(X)
+            clf.fit(X_feat, y)
+            model = (rocket, clf)
+        else:
+            clf = create_model()
+            clf.fit(X, y)
+            model = clf
 
         # ---- Infer ----
         print("  Running inference on validation set...")
-        pred_list = run_inference(val_sigs, clf, config, sig_cols,
+        pred_list = run_inference(val_sigs, model, config, sig_cols,
                                   confidence_threshold=confidence_threshold)
         pred_df = pd.DataFrame(pred_list, columns=['time_start', 'time_end', 'eID'])
         print(f"  Detected {len(pred_df)} event intervals")
@@ -213,7 +239,7 @@ def run_k_fold_cross_evaluation(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='K-fold cross-evaluation: split → train SVM → infer → evaluate'
+        description='K-fold cross-evaluation: split → train → infer → evaluate'
     )
     parser.add_argument('signals_file',  help='Path to signals xlsx file')
     parser.add_argument('events_file',   help='Path to events xlsx file')
@@ -221,6 +247,9 @@ if __name__ == "__main__":
     parser.add_argument('n_splits',      type=int, help='Number of folds (k)')
     parser.add_argument('--confidence-threshold', type=float, default=0.7,
                         help='Confidence threshold for inference (default: 0.7)')
+    parser.add_argument('--baseline', type=str, default='svm',
+                        choices=['svm', 'rocket'],
+                        help="Baseline model to use: 'svm' (default) or 'rocket' (MiniRocket)")
 
     args = parser.parse_args()
 
@@ -230,6 +259,7 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         n_splits=args.n_splits,
         confidence_threshold=args.confidence_threshold,
+        baseline=args.baseline,
     )
 
-    print("\n✓ K-fold cross-evaluation complete!")
+    print(f"\n✓ K-fold cross-evaluation complete! (baseline: {args.baseline})")

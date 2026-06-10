@@ -12,3 +12,5 @@ scikit-learn
 librosa
 openpyxl
 torch
+sktime
+numba
