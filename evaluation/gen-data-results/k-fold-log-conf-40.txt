@@ -1,0 +1,164 @@
+============================================================
+Fold 1 / 10
+============================================================
+  Train:      135 events | 65941 signal rows
+  Validation: 15 events | 7052 signal rows
+  Building training dataset...
+  Training on 15696 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 67 event intervals
+Plot saved to gen-data-results/fold_0_plot.png
+  Macro  P=0.170  R=0.251  F1=0.203
+  Micro  P=0.132  R=0.294  F1=0.183
+============================================================
+
+============================================================
+Fold 2 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 6807 signal rows
+  Building training dataset...
+  Training on 16180 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 41 event intervals
+Plot saved to gen-data-results/fold_1_plot.png
+  Macro  P=0.372  R=0.478  F1=0.419
+  Micro  P=0.235  R=0.426  F1=0.303
+============================================================
+
+============================================================
+Fold 3 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 13769 signal rows
+  Building training dataset...
+  Training on 16887 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 74 event intervals
+
+Instantaneous events detected (±0.5s tolerance).
+  GT:        2 instantaneous events expanded
+Plot saved to gen-data-results/fold_2_plot.png
+  Macro  P=0.036  R=0.324  F1=0.065
+  Micro  P=0.026  R=0.252  F1=0.047
+============================================================
+
+============================================================
+Fold 4 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 12020 signal rows
+  Building training dataset...
+  Training on 15465 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 61 event intervals
+
+Instantaneous events detected (±0.5s tolerance).
+  GT:        1 instantaneous events expanded
+Plot saved to gen-data-results/fold_3_plot.png
+  Macro  P=0.181  R=0.285  F1=0.221
+  Micro  P=0.117  R=0.220  F1=0.153
+============================================================
+
+============================================================
+Fold 5 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 14282 signal rows
+  Building training dataset...
+  Training on 16609 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 84 event intervals
+
+Instantaneous events detected (±0.5s tolerance).
+  GT:        1 instantaneous events expanded
+Plot saved to gen-data-results/fold_4_plot.png
+  Macro  P=0.071  R=0.349  F1=0.118
+  Micro  P=0.050  R=0.332  F1=0.087
+============================================================
+
+============================================================
+Fold 6 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 18652 signal rows
+  Building training dataset...
+  Training on 15822 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 102 event intervals
+
+Instantaneous events detected (±0.5s tolerance).
+  GT:        1 instantaneous events expanded
+Plot saved to gen-data-results/fold_5_plot.png
+  Macro  P=0.094  R=0.274  F1=0.140
+  Micro  P=0.074  R=0.304  F1=0.119
+============================================================
+
+============================================================
+Fold 7 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 9835 signal rows
+  Building training dataset...
+  Training on 16112 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 67 event intervals
+
+Instantaneous events detected (±0.5s tolerance).
+  GT:        1 instantaneous events expanded
+Plot saved to gen-data-results/fold_6_plot.png
+  Macro  P=0.113  R=0.137  F1=0.124
+  Micro  P=0.082  R=0.131  F1=0.101
+============================================================
+
+============================================================
+Fold 8 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 14591 signal rows
+  Building training dataset...
+  Training on 16949 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 84 event intervals
+
+Instantaneous events detected (±0.5s tolerance).
+  GT:        2 instantaneous events expanded
+Plot saved to gen-data-results/fold_7_plot.png
+  Macro  P=0.050  R=0.489  F1=0.090
+  Micro  P=0.060  R=0.419  F1=0.105
+============================================================
+
+============================================================
+Fold 9 / 10
+============================================================
+  Train:      135 events | 71733 signal rows
+  Validation: 15 events | 11344 signal rows
+  Building training dataset...
+  Training on 16590 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 74 event intervals
+Plot saved to gen-data-results/fold_8_plot.png
+  Macro  P=0.119  R=0.407  F1=0.185
+  Micro  P=0.101  R=0.432  F1=0.164
+============================================================
+
+============================================================
+Fold 10 / 10
+============================================================
+  Train:      135 events | 65409 signal rows
+  Validation: 15 events | 10768 signal rows
+  Building training dataset...
+  Training on 14592 samples (0 NaN samples discarded)
+  Running inference on validation set...
+  Detected 74 event intervals
+
+Instantaneous events detected (±0.5s tolerance).
+  GT:        1 instantaneous events expanded
+Plot saved to gen-data-results/fold_9_plot.png
+  Macro  P=0.191  R=0.194  F1=0.192
+  Micro  P=0.172  R=0.237  F1=0.199
+============================================================
+
+Evaluation report saved to: gen-data-results/evaluation-report.xlsx
+
+✓ K-fold cross-evaluation complete!

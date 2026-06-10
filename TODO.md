@@ -8,7 +8,7 @@
 - correct generation script to include end time also ✅
 - correct evaluation script to use time as TP, FP, FN ✅
 - refactor SVM algorithm to work with new data structure ✅
-- find a public database with signals and labeled events and try the baselines and evaluate
+- find a public database with signals and labeled events and try the baselines and evaluate ✅
 
 - SVM baseline algorithm:
   - implement simple version ✅
@@ -22,12 +22,11 @@
   - check evaluation with long events and single events (start_time == end_time) ✅
   - micro macro averaging matrics, test and add more events to the test ✅
   - add folding ✅
-  - binary classification
 
 ## 15.3.
 
 - fix SVM, test with other generated data ✅
-- evaluate on different train, test, validation splits
+- evaluate on different train, test, validation splits ✅
 
 - make k-fold automatic: how does k-fold split data (70/30?), compare evaluations ✅
 - save evaluation results of generated and public data to file ✅
@@ -38,11 +37,15 @@
 
 - implement end to end delays, compare start times and end times (+ label) ✅
 - histogram of differences, show std deviation ✅
-- merge to main branch
-- check sampling frequencies
-- update readme with db links
-- analyze data with Orange
+- merge to main branch ✅
+- analyze data with Orange ✅
+
+## 24.4.
+
 - Try with Luka's signals when ready
+- check sampling frequencies
+- fix k-fold for Oppo db ✅
+- try different params: sig_buffer_s
 
 ## K-Fold Cross-Validation
 
@@ -56,7 +59,7 @@ Steps:
 3. then shift the validation fold to 2nd fold (training data changes)
 4. ALWAYS use the same hyperparameteres
 5. Now we get K models
-6. If aggeregate metrics look goot, then the modelling approach is valid,
+6. If aggeregate metrics look good, then the modelling approach is valid,
    if the metrics dont look good, adjust hyperparameters and start over
 7. train the model on all the training data
 8. test it on the test set as usual

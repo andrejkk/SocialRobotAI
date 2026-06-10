@@ -42,6 +42,17 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
     gt_df   = gt_df.copy()
     pred_df = pred_df.copy()
 
+    # Normalize eID types to string, stripping ".0" from float-encoded integers
+    # (e.g. pandas reads integer Excel columns as float64: 405.0 → "405")
+    def _norm_eid(val):
+        try:
+            return str(int(float(val)))
+        except (ValueError, TypeError):
+            return str(val)
+
+    gt_df['eID']   = gt_df['eID'].map(_norm_eid)
+    pred_df['eID'] = pred_df['eID'].map(_norm_eid)
+
     gt_has_instant   = (gt_df['time_start']   == gt_df['time_end']).any()
     pred_has_instant = (pred_df['time_start'] == pred_df['time_end']).any()
 
@@ -182,17 +193,17 @@ def print_timing_differences(diffs):
     start_diffs = np.array([d['start_diff'] for d in diffs])
     end_diffs   = np.array([d['end_diff']   for d in diffs])
 
-    print("\n" + "=" * 60)
-    print("Timing-Difference Metrics  (predicted − ground truth)")
-    print("=" * 60)
+    # print("\n" + "=" * 60)
+    # print("Timing-Difference Metrics  (predicted − ground truth)")
+    # print("=" * 60)
 
-    for d in diffs:
-        print(f"  eID={d['eID']}  "
-              f"GT[{d['gt_start']:.2f}–{d['gt_end']:.2f}]  "
-              f"Pred[{d['pred_start']:.2f}–{d['pred_end']:.2f}]  "
-              f"Δstart={d['start_diff']:+.4f}s  "
-              f"Δend={d['end_diff']:+.4f}s  "
-              f"label_match={d['label_match']}")
+    # for d in diffs:
+    #     print(f"  eID={d['eID']}  "
+    #           f"GT[{d['gt_start']:.2f}–{d['gt_end']:.2f}]  "
+    #           f"Pred[{d['pred_start']:.2f}–{d['pred_end']:.2f}]  "
+    #           f"Δstart={d['start_diff']:+.4f}s  "
+    #           f"Δend={d['end_diff']:+.4f}s  "
+    #           f"label_match={d['label_match']}")
 
     print(f"\n  Matched pairs: {len(diffs)}")
     print(f"  Start-time differences  — mean: {np.mean(start_diffs):+.4f}s  "
