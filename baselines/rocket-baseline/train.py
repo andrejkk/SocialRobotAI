@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from rocket_utils import build_dataset, create_model, run_inference
+from rocket_utils import build_dataset, create_model
 
 #%% ===================================================
 # 1 — Load data
@@ -74,32 +74,32 @@ joblib.dump(model_data, 'model.pkl')
 print("Model saved to model.pkl")
 
 # Save class mapping for reference
-np.save("classes.npy", clf.named_steps['classifier'].classes_)
+np.save("classes.npy", clf.classes_)
 
 #%% ===================================================
 # 6 — Run inference on training data (sanity check)
 # ===================================================
 
-print("Running inference (sanity check on training data)...")
-detected_intervals = run_inference(sigs_df, (rocket, clf), config, sig_cols)
-print(f"Detected {len(detected_intervals)} event intervals")
+# print("Running inference (sanity check on training data)...")
+# detected_intervals = run_inference(sigs_df, (rocket, clf), config, sig_cols)
+# print(f"Detected {len(detected_intervals)} event intervals")
 
 #%% ===================================================
 # 7 — Save results
 # ===================================================
 
 # Save true events
-pd.DataFrame({
-    "time_start": events_df.time_start,
-    "time_end": events_df.time_end,
-    "eID": events_df.eID
-}).to_excel("true_events.xlsx", index=False)
+# pd.DataFrame({
+#     "time_start": events_df.time_start,
+#     "time_end": events_df.time_end,
+#     "eID": events_df.eID
+# }).to_excel("true_events.xlsx", index=False)
 
-# Save detected events
-pd.DataFrame({
-    "time_start": [interval[0] for interval in detected_intervals],
-    "time_end": [interval[1] for interval in detected_intervals],
-    "eID": [interval[2] for interval in detected_intervals]
-}).to_excel("detected_events.xlsx", index=False)
+# # Save detected events
+# pd.DataFrame({
+#     "time_start": [interval[0] for interval in detected_intervals],
+#     "time_end": [interval[1] for interval in detected_intervals],
+#     "eID": [interval[2] for interval in detected_intervals]
+# }).to_excel("detected_events.xlsx", index=False)
 
-print("Done! Results saved to detected_events.xlsx")
+# print("Done! Results saved to detected_events.xlsx")

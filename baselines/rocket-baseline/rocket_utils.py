@@ -9,6 +9,7 @@ for multi-class prediction with probability estimates.
 
 import numpy as np
 import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -118,7 +119,7 @@ def create_model(num_kernels=10000):
         3. LogisticRegression (multi-class with probability estimates)
     """
     rocket = MiniRocketMultivariate(num_kernels=num_kernels, random_state=42)
-    clf = Pipeline([
+    base_clf = Pipeline([
         ("scaler", StandardScaler()),
         ("classifier", LogisticRegression(
             max_iter=10000,
@@ -128,6 +129,7 @@ def create_model(num_kernels=10000):
             random_state=42,
         )),
     ])
+    clf = CalibratedClassifierCV(base_clf, method="isotonic", cv=3)
     return rocket, clf
 
 
@@ -170,8 +172,8 @@ def merge_close_intervals(intervals, gap_threshold=2.0, min_duration=0.3):
 
 def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
     """
-    Slide over sigs_df at config["time_step"] intervals, predict the class
-    at each step, and return detected event intervals.
+    Collect all sliding windows into a single batch, run MiniRocket transform
+    and classification in one vectorized pass, then return detected intervals.
 
     Args:
         sigs_df:  signals DataFrame with 'time_s' and signal columns
@@ -185,23 +187,51 @@ def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
     """
     rocket, clf = model
     window_size = config["window_size"]
-    detected_points = []
-    t = sigs_df.time_s.min() + window_size  # start after first full window
 
-    while t <= sigs_df.time_s.max():
+    # --- 1. Collect all windows into a batch ---
+    # Time stamps: [1431.519 1432.019 1432.519 1433.019 1433.519...]
+    timestamps = np.arange(
+        sigs_df.time_s.min() + window_size,
+        sigs_df.time_s.max() + 1e-9,
+        config["time_step"]
+    )
+
+    # For each timestamp t, extracts a window of signals
+    windows, valid_times = [], []
+    for t in timestamps:
         w = extract_window(sigs_df, t, window_size, sig_cols)
-        if w is not None:
-            # Pad to match training window length if needed
-            X_single = w[np.newaxis, :, :]  # (1, n_channels, n_timepoints)
-            X_feat = rocket.transform(X_single)
-            proba = clf.predict_proba(X_feat)
-            max_prob = np.max(proba)
-            pred = clf.predict(X_feat)[0]
-            if pred != "no_event" and max_prob > confidence_threshold:
-                detected_points.append((t, pred))
-        t += config["time_step"]
 
-    # Convert consecutive same-eID points to raw intervals
+        if w is not None:
+            windows.append(w)
+            valid_times.append(t)
+
+    if not windows:
+        return []
+
+    # Pad to uniform length and stack into (N, n_channels, max_len)
+    max_len = max(w.shape[1] for w in windows) # finds the longest window, so all windows can be padded to uniform length for batching
+    n_channels = len(sig_cols) # number of signal columns
+    X_batch = np.zeros((len(windows), n_channels, max_len))
+    for i, w in enumerate(windows):
+        X_batch[i, :, :w.shape[1]] = w
+
+
+    
+    # --- 2. Single batched transform + classify ---
+    X_feat = rocket.transform(X_batch)           # (N, num_kernels)
+    probabilities = clf.predict_proba(X_feat) # all class probabilities
+    max_probs = np.max(probabilities, axis=1) # max probability per window
+    preds = clf.classes_[np.argmax(probabilities, axis=1)] # predicted class per window
+    # preds:  ['no_event' 'no_event' '412' '413' '413' '413' '413' '413'...]
+    
+    # --- 3. Filter confident non-background predictions ---
+    detected_points = [
+        (t, pred)
+        for t, pred, max_prob in zip(valid_times, preds, max_probs)
+        if pred != "no_event" and max_prob > confidence_threshold
+    ]
+    
+    # --- 4. Convert consecutive same-eID points to raw intervals ---
     raw_intervals = []
     if detected_points:
         cur_start, cur_eid = detected_points[0]
