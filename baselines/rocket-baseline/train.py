@@ -12,15 +12,15 @@ from rocket_utils import build_dataset, create_model
 # ===================================================
 
 parser = argparse.ArgumentParser(description='MiniRocket baseline for event detection')
-parser.add_argument('signals_file', help='Path to signals xlsx file')
-parser.add_argument('events_file', help='Path to events xlsx file')
+parser.add_argument('signals_file', help='Path to signals csv file')
+parser.add_argument('events_file', help='Path to events csv file')
 parser.add_argument('--classifier', default=None,
                     help='Classifier override: svc_rbf|svc_linear|ridge|random_forest|logreg '
                          '(default: value from config.json)')
 args = parser.parse_args()
 
-sigs_df = pd.read_excel(args.signals_file)
-events_df = pd.read_excel(args.events_file)
+sigs_df = pd.read_csv(args.signals_file)
+events_df = pd.read_csv(args.events_file)
 
 sigs_df = sigs_df.sort_values("time_s").reset_index(drop=True)
 events_df = events_df.sort_values("time_start").reset_index(drop=True)

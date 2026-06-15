@@ -401,10 +401,10 @@ def plot_signals_with_events(sigs_df, gt_events_df, pred_events_df, t_int=[1, 50
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate predicted events against ground truth events')
-    parser.add_argument('gt_file', help='Path to ground truth events xlsx file')
-    parser.add_argument('pred_file', help='Path to predicted events xlsx file')
+    parser.add_argument('gt_file', help='Path to ground truth events csv file')
+    parser.add_argument('pred_file', help='Path to predicted events csv file')
     parser.add_argument('output_dir', help='Directory to save evaluation report and plots')
-    parser.add_argument('--signals-file', default=f'{DATA_PATH}/sigs_df.xlsx', help=f'Path to signals xlsx file (default: {DATA_PATH}/sigs_X_df.xlsx)')
+    parser.add_argument('signals_file', help=f'Path to signals csv file')
     parser.add_argument('--output', default=None, help='Output path for the plot (default: <output_dir>/events_evaluation_plot.png)')
     parser.add_argument('--instantaneous-tolerance', type=float, default=0.5, help='Tolerance window in seconds for instantaneous events (default: 0.5s). Instantaneous events are expanded to [time - tolerance, time + tolerance]')
     parser.add_argument('--eval-start-time', type=float, default=None, help='Start time for evaluation in seconds (e.g., train/test split point). If not provided, uses min time_start from predictions (default: None)')
@@ -424,24 +424,24 @@ if __name__ == "__main__":
         print("=" * 60)
         print("\nUsage:")
         print("  python evaluation.py <gt_file> <pred_file> [options]")
-        print("\nData Format: Excel files with columns: time_start, time_end, eID")
+        print("\nData Format: CSV files with columns: time_start, time_end, eID")
         print("  - Interval events: time_start < time_end (e.g., speaking from 10:00 to 10:15)")
         print("  - Instantaneous events: time_start == time_end (one timestamp, evaluated with tolerance window)")
         print("\nExamples:")
         print("  # Basic evaluation:")
-        print(f"  python evaluation.py {DATA_PATH}/events_X_df.xlsx {DATA_PATH}/predictions.xlsx")
+        print(f"  python evaluation.py {DATA_PATH}/events_X_df.csv {DATA_PATH}/predictions.csv")
         print("\n  # Specify tolerance for instantaneous events (default 0.5s):")
-        print(f"  python evaluation.py {DATA_PATH}/events_X_df.xlsx {DATA_PATH}/predictions.xlsx --instantaneous-tolerance 1.0")
+        print(f"  python evaluation.py {DATA_PATH}/events_X_df.csv {DATA_PATH}/predictions.csv --instantaneous-tolerance 1.0")
         exit(1)
     
     # Load ground truth events
     print(f"Loading ground truth events from: {args.gt_file}")
-    gt_events_df = pd.read_excel(args.gt_file)
+    gt_events_df = pd.read_csv(args.gt_file)
     print(f"  Loaded {len(gt_events_df)} ground truth events")
     
     # Load predicted events
     print(f"Loading predicted events from: {args.pred_file}")
-    pred_events_df = pd.read_excel(args.pred_file)
+    pred_events_df = pd.read_csv(args.pred_file)
     print(f"  Loaded {len(pred_events_df)} predicted events")
     
     # Determine evaluation start time
@@ -579,8 +579,8 @@ if __name__ == "__main__":
             'macro_f1':        f1,
         })
 
-    report_path = report_dir / 'evaluation-report.xlsx'
-    pd.DataFrame(report_rows).to_excel(report_path, index=False)
+    report_path = report_dir / 'evaluation-report.csv'
+    pd.DataFrame(report_rows).to_csv(report_path, index=False)
     print(f"\nEvaluation report saved to: {report_path}")
 
     # Visualization: Load signals and plot with both event types
@@ -588,7 +588,7 @@ if __name__ == "__main__":
     print("Visualization: Signals with Ground Truth Events")
     print("=" * 60)
 
-    sigs_df = pd.read_excel(args.signals_file)
+    sigs_df = pd.read_csv(args.signals_file)
     plot_signals_with_events(
         sigs_df,
         gt_events_df,

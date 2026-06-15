@@ -12,8 +12,8 @@ from rocket_utils import run_inference
 # ===================================================
 
 parser = argparse.ArgumentParser(description='MiniRocket baseline inference on test data')
-parser.add_argument('signals_file', help='Path to signals xlsx file')
-parser.add_argument('--events_file', default=None, help='Path to events xlsx file (optional, for comparison)')
+parser.add_argument('signals_file', help='Path to signals csv file')
+parser.add_argument('--events_file', default=None, help='Path to events csv file (optional, for comparison)')
 parser.add_argument('--model', default='model.pkl', help='Path to trained model')
 parser.add_argument('--confidence_threshold', type=float, default=None,
                     help='Global confidence threshold (default: value from config.json)')
@@ -41,11 +41,11 @@ if per_class_thresholds:
 
 # Load data
 print(f"Loading signals from {args.signals_file}...")
-sigs_df = pd.read_excel(args.signals_file)
+sigs_df = pd.read_csv(args.signals_file)
 
 if args.events_file:
     print(f"Loading events from {args.events_file}...")
-    events_df = pd.read_excel(args.events_file)
+    events_df = pd.read_csv(args.events_file)
 else:
     events_df = None
 
@@ -80,8 +80,8 @@ pd.DataFrame({
     "time_start": [interval[0] for interval in detected_intervals],
     "time_end": [interval[1] for interval in detected_intervals],
     "eID": [interval[2] for interval in detected_intervals]
-}).to_excel(output_path / "detected_events.xlsx", index=False)
-print(f"Saved detected events to {output_path / 'detected_events.xlsx'}")
+}).to_csv(output_path / "detected_events.csv", index=False)
+print(f"Saved detected events to {output_path / 'detected_events.csv'}")
 
 print("\nInference complete!")
 if events_df is not None:
