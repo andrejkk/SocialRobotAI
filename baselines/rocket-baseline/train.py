@@ -14,6 +14,9 @@ from rocket_utils import build_dataset, create_model
 parser = argparse.ArgumentParser(description='MiniRocket baseline for event detection')
 parser.add_argument('signals_file', help='Path to signals xlsx file')
 parser.add_argument('events_file', help='Path to events xlsx file')
+parser.add_argument('--classifier', default=None,
+                    help='Classifier override: svc_rbf|svc_linear|ridge|random_forest|logreg '
+                         '(default: value from config.json)')
 args = parser.parse_args()
 
 sigs_df = pd.read_excel(args.signals_file)
@@ -33,8 +36,10 @@ print(f"Using {len(sig_cols)} signal columns: {sig_cols[:5]}{'...' if len(sig_co
 with open("config.json", "r") as f:
     config = json.load(f)
 
+classifier = args.classifier or config.get("classifier", "svc_rbf")
 print(f"Config: window_size={config['window_size']}s, time_step={config['time_step']}s, "
-      f"num_kernels={config['num_kernels']}")
+      f"num_kernels={config['num_kernels']}, classifier={classifier}, "
+      f"balance_strategy={config.get('balance_strategy', 'none')}")
 
 #%% ===================================================
 # 3 — Build train set with events + no events
@@ -43,14 +48,25 @@ print(f"Config: window_size={config['window_size']}s, time_step={config['time_st
 print("Building training dataset...")
 X, y, times = build_dataset(sigs_df, events_df, config, sig_cols)
 print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} channels, {X.shape[2]} time points per window")
-print(f"Classes: {np.unique(y, return_counts=True)}")
+
+# Phase 1 diagnostics: per-class window counts
+pos_mask = y != "no_event"
+if pos_mask.any():
+    unique_cls, cls_counts = np.unique(y[pos_mask], return_counts=True)
+    print("\nPer-class window counts (positives only):")
+    for cls, cnt in sorted(zip(unique_cls, cls_counts), key=lambda x: x[1]):
+        print(f"  eID {cls:>6}: {cnt:>5} windows")
+    print(f"  Median: {int(np.median(cls_counts))}  |  "
+          f"Imbalance ratio: {cls_counts.max() / cls_counts.min():.1f}x\n")
+
+print(f"Full label distribution: {np.unique(y, return_counts=True)}")
 
 #%% ===================================================
 # 4 — Create and train model
 # ===================================================
 
-print("Creating MiniRocket model...")
-rocket, clf = create_model(num_kernels=config["num_kernels"])
+print(f"Creating MiniRocket model (classifier={classifier})...")
+rocket, clf = create_model(num_kernels=config["num_kernels"], classifier=classifier)
 
 # Fit MiniRocket transformer on training windows
 print("Fitting MiniRocket transformer...")
@@ -75,31 +91,3 @@ print("Model saved to model.pkl")
 
 # Save class mapping for reference
 np.save("classes.npy", clf.classes_)
-
-#%% ===================================================
-# 6 — Run inference on training data (sanity check)
-# ===================================================
-
-# print("Running inference (sanity check on training data)...")
-# detected_intervals = run_inference(sigs_df, (rocket, clf), config, sig_cols)
-# print(f"Detected {len(detected_intervals)} event intervals")
-
-#%% ===================================================
-# 7 — Save results
-# ===================================================
-
-# Save true events
-# pd.DataFrame({
-#     "time_start": events_df.time_start,
-#     "time_end": events_df.time_end,
-#     "eID": events_df.eID
-# }).to_excel("true_events.xlsx", index=False)
-
-# # Save detected events
-# pd.DataFrame({
-#     "time_start": [interval[0] for interval in detected_intervals],
-#     "time_end": [interval[1] for interval in detected_intervals],
-#     "eID": [interval[2] for interval in detected_intervals]
-# }).to_excel("detected_events.xlsx", index=False)
-
-# print("Done! Results saved to detected_events.xlsx")

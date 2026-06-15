@@ -15,7 +15,8 @@ parser = argparse.ArgumentParser(description='MiniRocket baseline inference on t
 parser.add_argument('signals_file', help='Path to signals xlsx file')
 parser.add_argument('--events_file', default=None, help='Path to events xlsx file (optional, for comparison)')
 parser.add_argument('--model', default='model.pkl', help='Path to trained model')
-parser.add_argument('--confidence_threshold', type=float, default=0.7, help='Confidence threshold for predictions')
+parser.add_argument('--confidence_threshold', type=float, default=None,
+                    help='Global confidence threshold (default: value from config.json)')
 parser.add_argument('--output_dir', default='.', help='Directory to save results')
 args = parser.parse_args()
 
@@ -29,6 +30,14 @@ clf = model_data['clf']
 print("Loading config from config.json...")
 with open("config.json", "r") as f:
     config = json.load(f)
+
+confidence_threshold = args.confidence_threshold
+if confidence_threshold is None:
+    confidence_threshold = config.get("confidence_threshold", 0.7)
+
+per_class_thresholds = config.get("per_class_thresholds", {})
+if per_class_thresholds:
+    print(f"Per-class thresholds: {per_class_thresholds}")
 
 # Load data
 print(f"Loading signals from {args.signals_file}...")
@@ -51,10 +60,11 @@ sig_cols = [c for c in sigs_df.columns if c.startswith("sig_")]
 # 2 — Inference on test data
 # ===================================================
 
-print(f"Running inference on test data with confidence threshold {args.confidence_threshold}...")
+print(f"Running inference (confidence_threshold={confidence_threshold})...")
 detected_intervals = run_inference(
     sigs_df, (rocket, clf), config, sig_cols,
-    confidence_threshold=args.confidence_threshold
+    confidence_threshold=confidence_threshold,
+    per_class_thresholds=per_class_thresholds,
 )
 print(f"Detected {len(detected_intervals)} intervals after merging")
 

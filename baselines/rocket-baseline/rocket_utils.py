@@ -3,14 +3,23 @@ Shared utilities for MiniRocket-based event detection.
 Imported by train.py, infer.py, and k-fold-cross-evaluation.py.
 
 Uses sktime's MiniRocketMultivariate transformer to extract convolutional
-features from raw signal windows, then a LogisticRegression classifier
-for multi-class prediction with probability estimates.
+features from raw signal windows, then a classifier for multi-class
+prediction with probability estimates.
+
+Classifiers available via create_model(classifier=...):
+  svc_rbf       SVC RBF + sigmoid calibration (default)
+  svc_linear    SVC linear + sigmoid calibration
+  ridge         RidgeClassifierCV with softmax probabilities (canonical ROCKET pairing)
+  random_forest RandomForestClassifier with balanced subsampling
+  logreg        LogisticRegression (reference baseline)
 """
 
 import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
+from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sktime.transformations.panel.rocket import MiniRocketMultivariate
@@ -47,6 +56,11 @@ def build_dataset(sigs, events, config, sig_cols):
     config["time_step"] intervals, avoiding event windows by
     config["event_tolerance"] seconds on either side.
 
+    Per-class balancing (Phase 2):
+        If config["balance_strategy"] == "per_class", each event class is
+        resampled (undersample dominant / replicate rare) to a common target.
+        target = config["samples_per_class"]  (int, or null → median count)
+
     Returns:
         X:     np.ndarray of shape (n_samples, n_channels, window_length)
         y:     np.ndarray of string labels
@@ -72,6 +86,39 @@ def build_dataset(sigs, events, config, sig_cols):
                 except (ValueError, TypeError):
                     labels.append(str(row.eID))
                 times.append(t)
+
+    # --- Per-class balancing (Phase 2) ---
+    balance_strategy = config.get("balance_strategy", "none")
+    if balance_strategy == "per_class" and windows:
+        # Group positive window indices by class label
+        class_indices: dict[str, list[int]] = {}
+        for i, lbl in enumerate(labels):
+            class_indices.setdefault(lbl, []).append(i)
+
+        counts = {cls: len(idxs) for cls, idxs in class_indices.items()}
+
+        # Determine target count per class
+        target = config.get("samples_per_class")
+        if target is None:
+            target = int(np.median(list(counts.values())))
+        target = max(target, 1)
+
+        print(f"\nPer-class balancing: target={target} windows/class")
+        for cls, cnt in sorted(counts.items(), key=lambda x: x[1]):
+            action = "↓ undersample" if cnt > target else "↑ oversample"
+            print(f"  eID {cls:>6}: {cnt:>5} → {target}  {action}")
+
+        rng = np.random.default_rng(42)
+        balanced_windows, balanced_labels, balanced_times = [], [], []
+        for cls, idxs in class_indices.items():
+            chosen = rng.choice(idxs, size=target, replace=(len(idxs) < target))
+            for i in chosen:
+                balanced_windows.append(windows[i])
+                balanced_labels.append(labels[i])
+                balanced_times.append(times[i])
+
+        windows, labels, times = balanced_windows, balanced_labels, balanced_times
+        print(f"  Total positive windows after balancing: {len(windows)}\n")
 
     # Negative samples: no_event regions
     n_no = int(len(windows) * config["no_event_ratio"])
@@ -109,27 +156,98 @@ def build_dataset(sigs, events, config, sig_cols):
 # Model factory
 # ---------------------------------------------------------------------------
 
-def create_model(num_kernels=10000):
+class _RidgeProbaClassifier:
     """
-    Return a fresh, untrained MiniRocket pipeline.
+    RidgeClassifierCV wrapped to expose predict_proba (softmax of decision
+    scores) and classes_, matching the interface expected by run_inference.
+    This is the canonical classifier pairing for ROCKET features.
+    """
 
-    Pipeline:
-        1. MiniRocketMultivariate (convolutional feature extraction)
-        2. StandardScaler (normalize features)
-        3. LogisticRegression (multi-class with probability estimates)
+    def __init__(self):
+        self._pipeline = Pipeline([
+            ("scaler", StandardScaler()),
+            ("ridge", RidgeClassifierCV(class_weight="balanced")),
+        ])
+        self.classes_ = None
+
+    def fit(self, X, y):
+        self._pipeline.fit(X, y)
+        self.classes_ = self._pipeline.named_steps["ridge"].classes_
+        return self
+
+    def predict_proba(self, X):
+        scores = self._pipeline.decision_function(X)
+        if scores.ndim == 1:
+            # Binary case: make two-column matrix
+            scores = np.column_stack([-scores, scores])
+        # Numerically stable softmax
+        scores = scores - scores.max(axis=1, keepdims=True)
+        exp_s = np.exp(scores)
+        return exp_s / exp_s.sum(axis=1, keepdims=True)
+
+    def predict(self, X):
+        return self._pipeline.predict(X)
+
+
+def create_model(num_kernels=10000, classifier="svc_rbf"):
+    """
+    Return a fresh, untrained (rocket, clf) pair.
+
+    Args:
+        num_kernels: number of MiniRocket random kernels
+        classifier:  one of 'svc_rbf' | 'svc_linear' | 'ridge' |
+                     'random_forest' | 'logreg'
+
+    The classifier is applied to the rocket feature matrix (shape N × num_kernels).
+    All returned classifiers expose .predict_proba() and .classes_.
+
+    Notes on calibration:
+        svc_rbf / svc_linear use sigmoid calibration (cv=3), which is
+        more stable than isotonic on small per-class sample sizes.
+        ridge, random_forest, logreg produce calibrated probabilities natively.
     """
     rocket = MiniRocketMultivariate(num_kernels=num_kernels, random_state=42)
-    base_clf = Pipeline([
-        ("scaler", StandardScaler()),
-        ("classifier", LogisticRegression(
-            max_iter=10000,
-            class_weight="balanced",
-            multi_class="multinomial",
-            solver="lbfgs",
+
+    if classifier == "svc_rbf":
+        base = Pipeline([
+            ("scaler", StandardScaler()),
+            ("svm", SVC(kernel="rbf", probability=True,
+                        class_weight="balanced", random_state=42)),
+        ])
+        clf = CalibratedClassifierCV(base, method="sigmoid", cv=3)
+
+    elif classifier == "svc_linear":
+        base = Pipeline([
+            ("scaler", StandardScaler()),
+            ("svm", SVC(kernel="linear", probability=True,
+                        class_weight="balanced", random_state=42)),
+        ])
+        clf = CalibratedClassifierCV(base, method="sigmoid", cv=3)
+
+    elif classifier == "ridge":
+        clf = _RidgeProbaClassifier()
+
+    elif classifier == "random_forest":
+        clf = RandomForestClassifier(
+            n_estimators=200,
+            class_weight="balanced_subsample",
             random_state=42,
-        )),
-    ])
-    clf = CalibratedClassifierCV(base_clf, method="isotonic", cv=3)
+            n_jobs=-1,
+        )
+
+    elif classifier == "logreg":
+        clf = Pipeline([
+            ("scaler", StandardScaler()),
+            ("logreg", LogisticRegression(
+                class_weight="balanced", max_iter=1000, random_state=42)),
+        ])
+
+    else:
+        raise ValueError(
+            f"Unknown classifier '{classifier}'. "
+            "Choose from: svc_rbf, svc_linear, ridge, random_forest, logreg"
+        )
+
     return rocket, clf
 
 
@@ -170,23 +288,29 @@ def merge_close_intervals(intervals, gap_threshold=2.0, min_duration=0.3):
 # Full inference pipeline
 # ---------------------------------------------------------------------------
 
-def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
+def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7,
+                  per_class_thresholds=None):
     """
     Collect all sliding windows into a single batch, run MiniRocket transform
     and classification in one vectorized pass, then return detected intervals.
 
     Args:
-        sigs_df:  signals DataFrame with 'time_s' and signal columns
-        model:    tuple of (fitted_rocket_transformer, fitted_classifier_pipeline)
-        config:   dict with 'window_size', 'time_step'
-        sig_cols: list of signal column names
-        confidence_threshold: minimum probability to accept a prediction
+        sigs_df:               signals DataFrame with 'time_s' and signal columns
+        model:                 tuple of (fitted_rocket_transformer, fitted_classifier)
+        config:                dict with 'window_size', 'time_step'
+        sig_cols:              list of signal column names
+        confidence_threshold:  global fallback minimum probability to accept a prediction
+        per_class_thresholds:  optional dict {eID: threshold} overriding the global
+                               threshold for specific classes.  Rare classes can be
+                               given a lower threshold to improve recall.
+                               Example: {"401": 0.4, "403": 0.4, "413": 0.8}
 
     Returns:
         list of (time_start, time_end, eID) tuples (after merging)
     """
     rocket, clf = model
     window_size = config["window_size"]
+    _per_class = per_class_thresholds or {}
 
     # --- 1. Collect all windows into a batch ---
     # Time stamps: [1431.519 1432.019 1432.519 1433.019 1433.519...]
@@ -200,7 +324,6 @@ def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
     windows, valid_times = [], []
     for t in timestamps:
         w = extract_window(sigs_df, t, window_size, sig_cols)
-
         if w is not None:
             windows.append(w)
             valid_times.append(t)
@@ -209,28 +332,26 @@ def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
         return []
 
     # Pad to uniform length and stack into (N, n_channels, max_len)
-    max_len = max(w.shape[1] for w in windows) # finds the longest window, so all windows can be padded to uniform length for batching
-    n_channels = len(sig_cols) # number of signal columns
+    max_len = max(w.shape[1] for w in windows)
+    n_channels = len(sig_cols)
     X_batch = np.zeros((len(windows), n_channels, max_len))
     for i, w in enumerate(windows):
         X_batch[i, :, :w.shape[1]] = w
 
-
-    
     # --- 2. Single batched transform + classify ---
-    X_feat = rocket.transform(X_batch)           # (N, num_kernels)
-    probabilities = clf.predict_proba(X_feat) # all class probabilities
-    max_probs = np.max(probabilities, axis=1) # max probability per window
-    preds = clf.classes_[np.argmax(probabilities, axis=1)] # predicted class per window
-    # preds:  ['no_event' 'no_event' '412' '413' '413' '413' '413' '413'...]
-    
+    X_feat = rocket.transform(X_batch)                          # (N, num_kernels)
+    probabilities = clf.predict_proba(X_feat)                   # (N, n_classes)
+    max_probs = np.max(probabilities, axis=1)                   # (N,)
+    preds = clf.classes_[np.argmax(probabilities, axis=1)]      # (N,)
+
     # --- 3. Filter confident non-background predictions ---
+    # Per-class threshold: use class-specific value if provided, else global fallback
     detected_points = [
         (t, pred)
-        for t, pred, max_prob in zip(valid_times, preds, max_probs)
-        if pred != "no_event" and max_prob > confidence_threshold
+        for t, pred, prob in zip(valid_times, preds, max_probs)
+        if pred != "no_event" and prob > _per_class.get(pred, confidence_threshold)
     ]
-    
+
     # --- 4. Convert consecutive same-eID points to raw intervals ---
     raw_intervals = []
     if detected_points:

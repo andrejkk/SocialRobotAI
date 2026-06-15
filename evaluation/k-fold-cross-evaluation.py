@@ -74,12 +74,15 @@ def run_k_fold_cross_evaluation(
 ):
     build_dataset, create_model, run_inference, config_path = _load_baseline(baseline)
 
-    sigs_df   = pd.read_excel(sigs_file).sort_values('time_s').reset_index(drop=True)
-    events_df = pd.read_excel(events_file).sort_values('time_start').reset_index(drop=True)
+    sigs_df   = pd.read_csv(sigs_file).sort_values('time_s').reset_index(drop=True)
+    events_df = pd.read_csv(events_file).sort_values('time_start').reset_index(drop=True)
 
     with open(config_path) as f:
         config = json.load(f)
 
+    if confidence_threshold is None:
+        confidence_threshold = config.get('confidence_threshold', 0.3)
+    
     sig_cols = [c for c in sigs_df.columns if c.startswith('sig_')]
     print(f"Loaded {len(sigs_df)} signal rows, {len(events_df)} events, "
           f"{len(sig_cols)} signal columns")
@@ -87,14 +90,37 @@ def run_k_fold_cross_evaluation(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=False)
     report_rows = []
 
-    for fold, (train_idx, val_idx) in enumerate(skf.split(events_df, events_df['eID'])):
-        print(f"\n{'='*60}\nFold {fold + 1} / {n_splits}\n{'='*60}")
+    # Determine fold strategy based on baseline
+    if baseline == 'rocket':
+        # Time-based folds: divide sorted events into contiguous time segments
+        events_df = events_df.sort_values('time_start').reset_index(drop=True)
+        fold_size = len(events_df) // n_splits
+        fold_iterator = []
+        for fold in range(n_splits):
+            val_start = fold * fold_size
+            val_end   = val_start + fold_size if fold < n_splits - 1 else len(events_df)
+            val_mask  = np.zeros(len(events_df), dtype=bool)
+            val_mask[val_start:val_end] = True
+            fold_iterator.append((fold, val_mask))
+    else:
+        # SVM: StratifiedKFold to balance classes
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=False)
+        fold_iterator = [(fold, (train_idx, val_idx)) 
+                         for fold, (train_idx, val_idx) in enumerate(skf.split(events_df, events_df['eID']))]
 
-        train_events = events_df.iloc[train_idx].sort_values('time_start').reset_index(drop=True)
-        val_events   = events_df.iloc[val_idx].sort_values('time_start').reset_index(drop=True)
+    for fold_data in fold_iterator:
+        if baseline == 'rocket':
+            fold, val_mask = fold_data
+            train_events = events_df[~val_mask].reset_index(drop=True)
+            val_events   = events_df[val_mask].reset_index(drop=True)
+        else:
+            fold, (train_idx, val_idx) = fold_data
+            train_events = events_df.iloc[train_idx].sort_values('time_start').reset_index(drop=True)
+            val_events   = events_df.iloc[val_idx].sort_values('time_start').reset_index(drop=True)
+        
+        print(f"\n{'='*60}\nFold {fold + 1} / {n_splits}\n{'='*60}")
 
         # Filter signal rows to the relevant time range (+buffer for feature windows)
         train_sigs = sigs_df[
@@ -110,11 +136,11 @@ def run_k_fold_cross_evaluation(
         print(f"  Train:      {len(train_events)} events | {len(train_sigs)} signal rows")
         print(f"  Validation: {len(val_events)} events | {len(val_sigs)} signal rows")
 
-        # ---- Save splits to xlsx (temporary, for debugging) ----
-        train_sigs.to_excel(output_path / f'fold_{fold}_train_signals.xlsx', index=False)
-        val_sigs.to_excel(output_path / f'fold_{fold}_val_signals.xlsx', index=False)
-        train_events.to_excel(output_path / f'fold_{fold}_train_events.xlsx', index=False)
-        val_events.to_excel(output_path / f'fold_{fold}_val_events.xlsx', index=False)
+        # ---- Save splits to csv (temporary, for debugging) ----
+        train_sigs.to_csv(output_path / f'fold_{fold}_train_signals.csv', index=False)
+        val_sigs.to_csv(output_path / f'fold_{fold}_val_signals.csv', index=False)
+        train_events.to_csv(output_path / f'fold_{fold}_train_events.csv', index=False)
+        val_events.to_csv(output_path / f'fold_{fold}_val_events.csv', index=False)
 
         # ---- Train ----
         print("  Building training dataset...")
@@ -130,7 +156,11 @@ def run_k_fold_cross_evaluation(
               f"({(~valid).sum()} NaN samples discarded)")
 
         if baseline == 'rocket':
-            rocket, clf = create_model(num_kernels=config.get('num_kernels', 10000))
+            print(f"  Classifier: {config.get('classifier', 'svc_rbf')}")
+            rocket, clf = create_model(
+                num_kernels=config.get('num_kernels', 10000),
+                classifier=config.get('classifier', 'svc_rbf'),
+            )
             rocket.fit(X)
             X_feat = rocket.transform(X)
             clf.fit(X_feat, y)
@@ -143,12 +173,13 @@ def run_k_fold_cross_evaluation(
         # ---- Infer ----
         print("  Running inference on validation set...")
         pred_list = run_inference(val_sigs, model, config, sig_cols,
-                                  confidence_threshold=confidence_threshold)
+                                  confidence_threshold=confidence_threshold,
+                                  per_class_thresholds=config.get('per_class_thresholds', {}))
         pred_df = pd.DataFrame(pred_list, columns=['time_start', 'time_end', 'eID'])
         print(f"  Detected {len(pred_df)} event intervals")
 
         # Save predicted events
-        pred_df.to_excel(output_path / f'fold_{fold}_predicted_events.xlsx', index=False)
+        pred_df.to_csv(output_path / f'fold_{fold}_predicted_events.csv', index=False)
 
         # ---- Evaluate ----
         result = evaluate_events(val_events, pred_df)
@@ -226,8 +257,8 @@ def run_k_fold_cross_evaluation(
 
     # ---- Save report ----
     report_df = pd.DataFrame(report_rows)
-    report_path = output_path / 'evaluation-report.xlsx'
-    report_df.to_excel(report_path, index=False)
+    report_path = output_path / 'evaluation-report.csv'
+    report_df.to_csv(report_path, index=False)
     print(f"\nEvaluation report saved to: {report_path}")
 
     return report_df
@@ -241,11 +272,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='K-fold cross-evaluation: split → train → infer → evaluate'
     )
-    parser.add_argument('signals_file',  help='Path to signals xlsx file')
-    parser.add_argument('events_file',   help='Path to events xlsx file')
-    parser.add_argument('output_dir',    help='Directory for plots and evaluation-report.xlsx')
+    parser.add_argument('signals_file',  help='Path to signals csv file')
+    parser.add_argument('events_file',   help='Path to events csv file')
+    parser.add_argument('output_dir',    help='Directory for plots and evaluation-report.csv')
     parser.add_argument('n_splits',      type=int, help='Number of folds (k)')
-    parser.add_argument('--confidence-threshold', type=float, default=0.7,
+    parser.add_argument('--confidence-threshold', type=float, default=None,
                         help='Confidence threshold for inference (default: 0.7)')
     parser.add_argument('--baseline', type=str, default='svm',
                         choices=['svm', 'rocket'],

@@ -1,7 +1,21 @@
 {
-  "window_size": 2.0,
-  "time_step": 0.5,
+  "window_size": 1.5,
+  "time_step": 0.25,
   "no_event_ratio": 1.0,
   "event_tolerance": 1.0,
-  "num_kernels": 10000
+  "num_kernels": 10000,
+
+  "classifier": "logreg",
+
+  "balance_strategy": "per_class",
+  "samples_per_class": null,
+
+  "confidence_threshold": 0.3,
+  "per_class_thresholds": {
+    "401": 0.05,
+    "402": 0.05,
+    "403": 0.05,
+    "408": 0.05,
+    "411": 0.05
+  }
 }
