@@ -233,6 +233,8 @@ def run_k_fold_cross_evaluation(
         print(f"  Micro  P={result['micro_precision']:.3f}  "
               f"R={result['micro_recall']:.3f}  F1={result['micro_f1']:.3f}")
 
+        train_counts = train_events['eID'].astype(str).str.replace(r'\.0$', '', regex=True).value_counts()
+        val_counts   = val_events['eID'].astype(str).str.replace(r'\.0$', '', regex=True).value_counts()
         for eid in sorted(result['eID_metrics'].keys(), key=str):
             m = result['eID_metrics'][eid]
             tp, fp, fn = m['tp'], m['fp'], m['fn']
@@ -244,7 +246,8 @@ def run_k_fold_cross_evaluation(
             per_event_row = {
                 'fold': f"{fold} - {eid}",
                 'eID': eid,
-                'n_occurrences': int(val_events['eID'].value_counts().get(eid, 0)),
+                'n_val_occurrences':   int(val_counts.get(eid, 0)),
+                'n_train_occurrences': int(train_counts.get(eid, 0)),
                 'tp_s': tp,
                 'fp_s': fp,
                 'fn_s': fn,
@@ -257,9 +260,20 @@ def run_k_fold_cross_evaluation(
 
     # ---- Save report ----
     report_df = pd.DataFrame(report_rows)
-    report_path = output_path / 'evaluation-report.csv'
-    report_df.to_csv(report_path, index=False)
+    report_path = output_path / 'evaluation-report.xlsx'
+    report_df.to_excel(report_path, index=False)
     print(f"\nEvaluation report saved to: {report_path}")
+
+    # ---- Save run config ----
+    run_config = {
+        'baseline': baseline,
+        'n_splits': n_splits,
+        'confidence_threshold': confidence_threshold,
+        'sig_buffer_s': sig_buffer_s,
+    }
+    with open(output_path / 'run_config.json', 'w') as f:
+        json.dump(run_config, f, indent=2)
+    print(f"Run config saved to: {output_path / 'run_config.json'}")
 
     return report_df
 
@@ -274,7 +288,7 @@ if __name__ == "__main__":
     )
     parser.add_argument('signals_file',  help='Path to signals csv file')
     parser.add_argument('events_file',   help='Path to events csv file')
-    parser.add_argument('output_dir',    help='Directory for plots and evaluation-report.csv')
+    parser.add_argument('output_dir',    help='Directory for plots and evaluation-report.xlsx')
     parser.add_argument('n_splits',      type=int, help='Number of folds (k)')
     parser.add_argument('--confidence-threshold', type=float, default=None,
                         help='Confidence threshold for inference (default: 0.7)')
