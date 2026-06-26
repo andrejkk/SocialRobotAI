@@ -26,6 +26,45 @@ from sktime.transformations.panel.rocket import MiniRocketMultivariate
 
 
 # ---------------------------------------------------------------------------
+# Per-channel normalization
+# ---------------------------------------------------------------------------
+
+def compute_norm_stats(sigs, sig_cols):
+    """
+    Compute per-channel mean and std for z-normalization.
+
+    Stats must be fit on TRAINING signals only and then applied to both train
+    and validation/test signals to avoid information leakage.
+
+    Returns:
+        dict {col: {"mean": float, "std": float}}
+    """
+    stats = {}
+    for c in sig_cols:
+        mean = float(sigs[c].mean())
+        std = float(sigs[c].std())
+        if not np.isfinite(std) or std == 0.0:
+            std = 1.0
+        stats[c] = {"mean": mean, "std": std}
+    return stats
+
+
+def normalize_signals(sigs, sig_cols, stats):
+    """
+    Apply per-channel z-normalization using precomputed `stats`.
+
+    Only the signal columns are modified; 'time_s' and any other columns are
+    left untouched. Returns a new DataFrame (the input is not mutated).
+    """
+    out = sigs.copy()
+    for c in sig_cols:
+        mean = stats[c]["mean"]
+        std = stats[c]["std"]
+        out[c] = (out[c] - mean) / std
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Window helpers
 # ---------------------------------------------------------------------------
 
@@ -288,8 +327,7 @@ def merge_close_intervals(intervals, gap_threshold=2.0, min_duration=0.3):
 # Full inference pipeline
 # ---------------------------------------------------------------------------
 
-def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7,
-                  per_class_thresholds=None):
+def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
     """
     Collect all sliding windows into a single batch, run MiniRocket transform
     and classification in one vectorized pass, then return detected intervals.
@@ -297,20 +335,16 @@ def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7,
     Args:
         sigs_df:               signals DataFrame with 'time_s' and signal columns
         model:                 tuple of (fitted_rocket_transformer, fitted_classifier)
-        config:                dict with 'window_size', 'time_step'
+        config:                dict with 'window_size', 'time_step', and optional
+                               'gap_threshold' / 'min_duration' for post-processing
         sig_cols:              list of signal column names
-        confidence_threshold:  global fallback minimum probability to accept a prediction
-        per_class_thresholds:  optional dict {eID: threshold} overriding the global
-                               threshold for specific classes.  Rare classes can be
-                               given a lower threshold to improve recall.
-                               Example: {"401": 0.4, "403": 0.4, "413": 0.8}
+        confidence_threshold:  global minimum probability to accept a prediction
 
     Returns:
         list of (time_start, time_end, eID) tuples (after merging)
     """
     rocket, clf = model
     window_size = config["window_size"]
-    _per_class = per_class_thresholds or {}
 
     # --- 1. Collect all windows into a batch ---
     # Time stamps: [1431.519 1432.019 1432.519 1433.019 1433.519...]
@@ -345,11 +379,10 @@ def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7,
     preds = clf.classes_[np.argmax(probabilities, axis=1)]      # (N,)
 
     # --- 3. Filter confident non-background predictions ---
-    # Per-class threshold: use class-specific value if provided, else global fallback
     detected_points = [
         (t, pred)
         for t, pred, prob in zip(valid_times, preds, max_probs)
-        if pred != "no_event" and prob > _per_class.get(pred, confidence_threshold)
+        if pred != "no_event" and prob > confidence_threshold
     ]
 
     # --- 4. Convert consecutive same-eID points to raw intervals ---
@@ -365,4 +398,9 @@ def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7,
                 cur_start, cur_eid, cur_end = t, eid, t
         raw_intervals.append((cur_start, cur_end, cur_eid))
 
-    return merge_close_intervals(raw_intervals)
+    print('gap threshold: ', config.get("gap_threshold", 2.0))
+    return merge_close_intervals(
+        raw_intervals,
+        gap_threshold=config.get("gap_threshold", 2.0),
+        min_duration=config.get("min_duration", 0.3),
+    )

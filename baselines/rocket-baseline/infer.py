@@ -5,7 +5,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from rocket_utils import run_inference
+from rocket_utils import run_inference, normalize_signals
 
 #%% ===================================================
 # 1 — Load data and model
@@ -25,6 +25,7 @@ print(f"Loading model from {args.model}...")
 model_data = joblib.load(args.model)
 rocket = model_data['rocket']
 clf = model_data['clf']
+norm_stats = model_data.get('norm_stats')
 
 # Load config
 print("Loading config from config.json...")
@@ -34,10 +35,6 @@ with open("config.json", "r") as f:
 confidence_threshold = args.confidence_threshold
 if confidence_threshold is None:
     confidence_threshold = config.get("confidence_threshold", 0.7)
-
-per_class_thresholds = config.get("per_class_thresholds", {})
-if per_class_thresholds:
-    print(f"Per-class thresholds: {per_class_thresholds}")
 
 # Load data
 print(f"Loading signals from {args.signals_file}...")
@@ -56,6 +53,11 @@ if events_df is not None:
 # Derive signal columns automatically from the loaded file
 sig_cols = [c for c in sigs_df.columns if c.startswith("sig_")]
 
+# Apply the same per-channel normalization used during training
+if norm_stats is not None:
+    sigs_df = normalize_signals(sigs_df, sig_cols, norm_stats)
+    print("Applied per-channel z-normalization from trained model")
+
 #%% ===================================================
 # 2 — Inference on test data
 # ===================================================
@@ -64,7 +66,6 @@ print(f"Running inference (confidence_threshold={confidence_threshold})...")
 detected_intervals = run_inference(
     sigs_df, (rocket, clf), config, sig_cols,
     confidence_threshold=confidence_threshold,
-    per_class_thresholds=per_class_thresholds,
 )
 print(f"Detected {len(detected_intervals)} intervals after merging")
 

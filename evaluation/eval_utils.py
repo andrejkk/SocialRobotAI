@@ -135,8 +135,16 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
                   if (macro_prec + macro_rec) > 0 else 0)
 
     # MICRO metrics (per-eID average)
+    # Classes with no ground-truth support in this set (tp + fn == 0) are
+    # prediction-only false positives.  Their recall is undefined, so including
+    # them as a 0 would unfairly drag the per-class average down.  We exclude
+    # them from the micro average (matching sklearn's behaviour) while still
+    # counting their predicted time as FP in the macro metrics above.
     micro_precs, micro_recs = [], []
     for m in eID_metrics.values():
+        has_gt_support = (m['tp'] + m['fn']) > 0
+        if not has_gt_support:
+            continue
         p = m['tp'] / (m['tp'] + m['fp']) if (m['tp'] + m['fp']) > 0 else 0
         r = m['tp'] / (m['tp'] + m['fn']) if (m['tp'] + m['fn']) > 0 else 0
         micro_precs.append(p); micro_recs.append(r)

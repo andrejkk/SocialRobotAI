@@ -5,17 +5,18 @@
   "event_tolerance": 1.0,
   "num_kernels": 10000,
 
-  "classifier": "logreg",
+  "classifier": "svc_rbf",
 
   "balance_strategy": "per_class",
   "samples_per_class": null,
 
+  "normalize_signals": true,
+
+  "exclude_eids": [],
+  "min_occurrences": 3,
+
   "confidence_threshold": 0.3,
-  "per_class_thresholds": {
-    "401": 0.05,
-    "402": 0.05,
-    "403": 0.05,
-    "408": 0.05,
-    "411": 0.05
-  }
+
+  "gap_threshold": 2.0,
+  "min_duration": 0.3
 }

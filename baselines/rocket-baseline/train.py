@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from rocket_utils import build_dataset, create_model
+from rocket_utils import build_dataset, create_model, compute_norm_stats, normalize_signals
 
 #%% ===================================================
 # 1 — Load data
@@ -35,6 +35,13 @@ print(f"Using {len(sig_cols)} signal columns: {sig_cols[:5]}{'...' if len(sig_co
 
 with open("config.json", "r") as f:
     config = json.load(f)
+
+# Per-channel z-normalization (fit on training signals)
+norm_stats = None
+if config.get("normalize_signals", False):
+    norm_stats = compute_norm_stats(sigs_df, sig_cols)
+    sigs_df = normalize_signals(sigs_df, sig_cols, norm_stats)
+    print("Applied per-channel z-normalization to training signals")
 
 classifier = args.classifier or config.get("classifier", "svc_rbf")
 print(f"Config: window_size={config['window_size']}s, time_step={config['time_step']}s, "
@@ -85,6 +92,8 @@ clf.fit(X_features, y)
 model_data = {
     'rocket': rocket,
     'clf': clf,
+    'norm_stats': norm_stats,
+    'sig_cols': sig_cols,
 }
 joblib.dump(model_data, 'model.pkl')
 print("Model saved to model.pkl")

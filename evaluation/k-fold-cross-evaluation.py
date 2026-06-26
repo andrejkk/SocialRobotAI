@@ -13,6 +13,14 @@ _HERE = Path(__file__).parent
 from eval_utils  import evaluate_events, plot_signals_with_events, compute_timing_differences
 
 
+def _read_table(path):
+    """Read a signals/events table from .csv or .xlsx/.xls."""
+    suffix = Path(path).suffix.lower()
+    if suffix in ('.xlsx', '.xls'):
+        return pd.read_excel(path)
+    return pd.read_csv(path)
+
+
 def _load_baseline(baseline_name):
     """Import baseline utilities and return (build_dataset, create_model, run_inference, config_path)."""
     if baseline_name == 'svm':
@@ -74,11 +82,32 @@ def run_k_fold_cross_evaluation(
 ):
     build_dataset, create_model, run_inference, config_path = _load_baseline(baseline)
 
-    sigs_df   = pd.read_csv(sigs_file).sort_values('time_s').reset_index(drop=True)
-    events_df = pd.read_csv(events_file).sort_values('time_start').reset_index(drop=True)
+    sigs_df   = _read_table(sigs_file).sort_values('time_s').reset_index(drop=True)
+    events_df = _read_table(events_file).sort_values('time_start').reset_index(drop=True)
 
     with open(config_path) as f:
         config = json.load(f)
+
+    # Per-channel z-normalization helpers (rocket baseline only)
+    normalize_signals = compute_norm_stats = None
+    if baseline == 'rocket' and config.get('normalize_signals', False):
+        from rocket_utils import compute_norm_stats, normalize_signals
+
+    # ---- Drop excluded / rare event classes ----
+    exclude_eids = {str(e) for e in config.get('exclude_eids', [])}
+    min_occurrences = config.get('min_occurrences', 0)
+    eid_str = events_df['eID'].astype(str).str.replace(r'\.0$', '', regex=True)
+    if min_occurrences and min_occurrences > 1:
+        counts = eid_str.value_counts()
+        rare = set(counts[counts < min_occurrences].index)
+        if rare:
+            print(f"Excluding rare classes (<{min_occurrences} occurrences): {sorted(rare)}")
+        exclude_eids |= rare
+    if exclude_eids:
+        keep_mask = ~eid_str.isin(exclude_eids)
+        dropped = (~keep_mask).sum()
+        events_df = events_df[keep_mask].reset_index(drop=True)
+        print(f"Excluded classes {sorted(exclude_eids)} ({dropped} events dropped)")
 
     if confidence_threshold is None:
         confidence_threshold = config.get('confidence_threshold', 0.3)
@@ -136,11 +165,11 @@ def run_k_fold_cross_evaluation(
         print(f"  Train:      {len(train_events)} events | {len(train_sigs)} signal rows")
         print(f"  Validation: {len(val_events)} events | {len(val_sigs)} signal rows")
 
-        # ---- Save splits to csv (temporary, for debugging) ----
-        train_sigs.to_csv(output_path / f'fold_{fold}_train_signals.csv', index=False)
-        val_sigs.to_csv(output_path / f'fold_{fold}_val_signals.csv', index=False)
-        train_events.to_csv(output_path / f'fold_{fold}_train_events.csv', index=False)
-        val_events.to_csv(output_path / f'fold_{fold}_val_events.csv', index=False)
+        # ---- Per-channel z-normalization (fit on train only, no leakage) ----
+        if normalize_signals is not None:
+            norm_stats = compute_norm_stats(train_sigs, sig_cols)
+            train_sigs = normalize_signals(train_sigs, sig_cols, norm_stats)
+            val_sigs   = normalize_signals(val_sigs, sig_cols, norm_stats)
 
         # ---- Train ----
         print("  Building training dataset...")
@@ -173,13 +202,9 @@ def run_k_fold_cross_evaluation(
         # ---- Infer ----
         print("  Running inference on validation set...")
         pred_list = run_inference(val_sigs, model, config, sig_cols,
-                                  confidence_threshold=confidence_threshold,
-                                  per_class_thresholds=config.get('per_class_thresholds', {}))
+                                  confidence_threshold=confidence_threshold)
         pred_df = pd.DataFrame(pred_list, columns=['time_start', 'time_end', 'eID'])
         print(f"  Detected {len(pred_df)} event intervals")
-
-        # Save predicted events
-        pred_df.to_csv(output_path / f'fold_{fold}_predicted_events.csv', index=False)
 
         # ---- Evaluate ----
         result = evaluate_events(val_events, pred_df)
@@ -203,14 +228,6 @@ def run_k_fold_cross_evaluation(
                 'end_diff_mean':   None, 'end_diff_min_abs':   None, 'end_diff_max_abs':   None,
             }
 
-        # ---- Plot ----
-        plot_path = output_path / f'fold_{fold}_plot.png'
-        plot_signals_with_events(
-            val_sigs, val_events, pred_df,
-            t_int=[val_sigs['time_s'].min(), val_sigs['time_s'].max()],
-            output_path=str(plot_path),
-        )
-
         # ---- Accumulate report row ----
         row = _fold_stats(fold, val_events)
         row.update({
@@ -223,7 +240,6 @@ def run_k_fold_cross_evaluation(
             'micro_precision':  result['micro_precision'],
             'micro_recall':     result['micro_recall'],
             'micro_f1':         result['micro_f1'],
-            'plot_file':        plot_path.name,
             **timing_stats,
         })
         report_rows.append(row)
