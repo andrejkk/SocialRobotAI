@@ -227,6 +227,14 @@ def run_k_fold_cross_evaluation(
                 'start_diff_mean': None, 'start_diff_min_abs': None, 'start_diff_max_abs': None,
                 'end_diff_mean':   None, 'end_diff_min_abs':   None, 'end_diff_max_abs':   None,
             }
+            
+        # ---- Plot ----
+        plot_path = output_path / f'fold_{fold}_plot.png'
+        plot_signals_with_events(
+            val_sigs, val_events, pred_df,
+            t_int=[val_sigs['time_s'].min(), val_sigs['time_s'].max()],
+            output_path=str(plot_path),
+        )
 
         # ---- Accumulate report row ----
         row = _fold_stats(fold, val_events)

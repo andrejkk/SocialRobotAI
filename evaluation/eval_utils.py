@@ -283,6 +283,18 @@ def plot_signals_with_events(
     if t_int is None:
         t_int = [sigs_df['time_s'].min(), sigs_df['time_s'].max()]
 
+    # Normalize eIDs to strip ".0" from float-encoded integers (e.g. 405.0 → "405")
+    def _norm_eid(val):
+        try:
+            return str(int(float(val)))
+        except (ValueError, TypeError):
+            return str(val)
+
+    gt_events_df   = gt_events_df.copy()
+    pred_events_df = pred_events_df.copy()
+    gt_events_df['eID']   = gt_events_df['eID'].map(_norm_eid)
+    pred_events_df['eID'] = pred_events_df['eID'].map(_norm_eid)
+
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
     all_eids = list(set(gt_events_df['eID'].unique()) | set(pred_events_df['eID'].unique()))
     event_colors = {eid: colors[i % len(colors)] for i, eid in enumerate(all_eids)}
