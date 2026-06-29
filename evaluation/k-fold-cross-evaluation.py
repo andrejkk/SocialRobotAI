@@ -10,12 +10,31 @@ from sklearn.model_selection import StratifiedKFold
 # Resolve paths to shared utilities
 # -------------------------------------------------------------------
 _HERE = Path(__file__).parent
-sys.path.insert(0, str(_HERE.parent / 'baselines' / 'svm-baseline'))
-
-from svm_utils import build_dataset, create_model, run_inference
 from eval_utils  import evaluate_events, plot_signals_with_events, compute_timing_differences
 
-CONFIG_PATH = _HERE.parent / 'baselines' / 'svm-baseline' / 'config.json'
+
+def _read_table(path):
+    """Read a signals/events table from .csv or .xlsx/.xls."""
+    suffix = Path(path).suffix.lower()
+    if suffix in ('.xlsx', '.xls'):
+        return pd.read_excel(path)
+    return pd.read_csv(path)
+
+
+def _load_baseline(baseline_name):
+    """Import baseline utilities and return (build_dataset, create_model, run_inference, config_path)."""
+    if baseline_name == 'svm':
+        sys.path.insert(0, str(_HERE.parent / 'baselines' / 'svm-baseline'))
+        from svm_utils import build_dataset, create_model, run_inference
+        config_path = _HERE.parent / 'baselines' / 'svm-baseline' / 'config.json'
+        return build_dataset, create_model, run_inference, config_path
+    elif baseline_name == 'rocket':
+        sys.path.insert(0, str(_HERE.parent / 'baselines' / 'rocket-baseline'))
+        from rocket_utils import build_dataset, create_model, run_inference
+        config_path = _HERE.parent / 'baselines' / 'rocket-baseline' / 'config.json'
+        return build_dataset, create_model, run_inference, config_path
+    else:
+        raise ValueError(f"Unknown baseline: {baseline_name}. Use 'svm' or 'rocket'.")
 
 
 # -------------------------------------------------------------------
@@ -59,13 +78,40 @@ def run_k_fold_cross_evaluation(
     n_splits=5,
     confidence_threshold=0.7,
     sig_buffer_s=5.0,
+    baseline='svm',
 ):
-    sigs_df   = pd.read_excel(sigs_file).sort_values('time_s').reset_index(drop=True)
-    events_df = pd.read_excel(events_file).sort_values('time_start').reset_index(drop=True)
+    build_dataset, create_model, run_inference, config_path = _load_baseline(baseline)
 
-    with open(CONFIG_PATH) as f:
+    sigs_df   = _read_table(sigs_file).sort_values('time_s').reset_index(drop=True)
+    events_df = _read_table(events_file).sort_values('time_start').reset_index(drop=True)
+
+    with open(config_path) as f:
         config = json.load(f)
 
+    # Per-channel z-normalization helpers (rocket baseline only)
+    normalize_signals = compute_norm_stats = None
+    if baseline == 'rocket' and config.get('normalize_signals', False):
+        from rocket_utils import compute_norm_stats, normalize_signals
+
+    # ---- Drop excluded / rare event classes ----
+    exclude_eids = {str(e) for e in config.get('exclude_eids', [])}
+    min_occurrences = config.get('min_occurrences', 0)
+    eid_str = events_df['eID'].astype(str).str.replace(r'\.0$', '', regex=True)
+    if min_occurrences and min_occurrences > 1:
+        counts = eid_str.value_counts()
+        rare = set(counts[counts < min_occurrences].index)
+        if rare:
+            print(f"Excluding rare classes (<{min_occurrences} occurrences): {sorted(rare)}")
+        exclude_eids |= rare
+    if exclude_eids:
+        keep_mask = ~eid_str.isin(exclude_eids)
+        dropped = (~keep_mask).sum()
+        events_df = events_df[keep_mask].reset_index(drop=True)
+        print(f"Excluded classes {sorted(exclude_eids)} ({dropped} events dropped)")
+
+    if confidence_threshold is None:
+        confidence_threshold = config.get('confidence_threshold', 0.3)
+    
     sig_cols = [c for c in sigs_df.columns if c.startswith('sig_')]
     print(f"Loaded {len(sigs_df)} signal rows, {len(events_df)} events, "
           f"{len(sig_cols)} signal columns")
@@ -73,14 +119,37 @@ def run_k_fold_cross_evaluation(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=False)
     report_rows = []
 
-    for fold, (train_idx, val_idx) in enumerate(skf.split(events_df, events_df['eID'])):
-        print(f"\n{'='*60}\nFold {fold + 1} / {n_splits}\n{'='*60}")
+    # Determine fold strategy based on baseline
+    if baseline == 'rocket':
+        # Time-based folds: divide sorted events into contiguous time segments
+        events_df = events_df.sort_values('time_start').reset_index(drop=True)
+        fold_size = len(events_df) // n_splits
+        fold_iterator = []
+        for fold in range(n_splits):
+            val_start = fold * fold_size
+            val_end   = val_start + fold_size if fold < n_splits - 1 else len(events_df)
+            val_mask  = np.zeros(len(events_df), dtype=bool)
+            val_mask[val_start:val_end] = True
+            fold_iterator.append((fold, val_mask))
+    else:
+        # SVM: StratifiedKFold to balance classes
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=False)
+        fold_iterator = [(fold, (train_idx, val_idx)) 
+                         for fold, (train_idx, val_idx) in enumerate(skf.split(events_df, events_df['eID']))]
 
-        train_events = events_df.iloc[train_idx].sort_values('time_start').reset_index(drop=True)
-        val_events   = events_df.iloc[val_idx].sort_values('time_start').reset_index(drop=True)
+    for fold_data in fold_iterator:
+        if baseline == 'rocket':
+            fold, val_mask = fold_data
+            train_events = events_df[~val_mask].reset_index(drop=True)
+            val_events   = events_df[val_mask].reset_index(drop=True)
+        else:
+            fold, (train_idx, val_idx) = fold_data
+            train_events = events_df.iloc[train_idx].sort_values('time_start').reset_index(drop=True)
+            val_events   = events_df.iloc[val_idx].sort_values('time_start').reset_index(drop=True)
+        
+        print(f"\n{'='*60}\nFold {fold + 1} / {n_splits}\n{'='*60}")
 
         # Filter signal rows to the relevant time range (+buffer for feature windows)
         train_sigs = sigs_df[
@@ -96,33 +165,46 @@ def run_k_fold_cross_evaluation(
         print(f"  Train:      {len(train_events)} events | {len(train_sigs)} signal rows")
         print(f"  Validation: {len(val_events)} events | {len(val_sigs)} signal rows")
 
-        # ---- Save splits to xlsx (temporary, for debugging) ----
-        train_sigs.to_excel(output_path / f'fold_{fold}_train_signals.xlsx', index=False)
-        val_sigs.to_excel(output_path / f'fold_{fold}_val_signals.xlsx', index=False)
-        train_events.to_excel(output_path / f'fold_{fold}_train_events.xlsx', index=False)
-        val_events.to_excel(output_path / f'fold_{fold}_val_events.xlsx', index=False)
+        # ---- Per-channel z-normalization (fit on train only, no leakage) ----
+        if normalize_signals is not None:
+            norm_stats = compute_norm_stats(train_sigs, sig_cols)
+            train_sigs = normalize_signals(train_sigs, sig_cols, norm_stats)
+            val_sigs   = normalize_signals(val_sigs, sig_cols, norm_stats)
 
         # ---- Train ----
         print("  Building training dataset...")
         X, y, _ = build_dataset(train_sigs, train_events, config, sig_cols)
 
-        valid = ~np.isnan(X).any(axis=1)
+        # Remove NaN samples (windows extending before signal start)
+        if X.ndim == 2:
+            valid = ~np.isnan(X).any(axis=1)
+        else:
+            valid = ~np.isnan(X.reshape(X.shape[0], -1)).any(axis=1)
         X, y = X[valid], y[valid]
         print(f"  Training on {len(X)} samples "
               f"({(~valid).sum()} NaN samples discarded)")
 
-        clf = create_model()
-        clf.fit(X, y)
+        if baseline == 'rocket':
+            print(f"  Classifier: {config.get('classifier', 'svc_rbf')}")
+            rocket, clf = create_model(
+                num_kernels=config.get('num_kernels', 10000),
+                classifier=config.get('classifier', 'svc_rbf'),
+            )
+            rocket.fit(X)
+            X_feat = rocket.transform(X)
+            clf.fit(X_feat, y)
+            model = (rocket, clf)
+        else:
+            clf = create_model()
+            clf.fit(X, y)
+            model = clf
 
         # ---- Infer ----
         print("  Running inference on validation set...")
-        pred_list = run_inference(val_sigs, clf, config, sig_cols,
+        pred_list = run_inference(val_sigs, model, config, sig_cols,
                                   confidence_threshold=confidence_threshold)
         pred_df = pd.DataFrame(pred_list, columns=['time_start', 'time_end', 'eID'])
         print(f"  Detected {len(pred_df)} event intervals")
-
-        # Save predicted events
-        pred_df.to_excel(output_path / f'fold_{fold}_predicted_events.xlsx', index=False)
 
         # ---- Evaluate ----
         result = evaluate_events(val_events, pred_df)
@@ -145,7 +227,7 @@ def run_k_fold_cross_evaluation(
                 'start_diff_mean': None, 'start_diff_min_abs': None, 'start_diff_max_abs': None,
                 'end_diff_mean':   None, 'end_diff_min_abs':   None, 'end_diff_max_abs':   None,
             }
-
+            
         # ---- Plot ----
         plot_path = output_path / f'fold_{fold}_plot.png'
         plot_signals_with_events(
@@ -166,7 +248,6 @@ def run_k_fold_cross_evaluation(
             'micro_precision':  result['micro_precision'],
             'micro_recall':     result['micro_recall'],
             'micro_f1':         result['micro_f1'],
-            'plot_file':        plot_path.name,
             **timing_stats,
         })
         report_rows.append(row)
@@ -176,6 +257,8 @@ def run_k_fold_cross_evaluation(
         print(f"  Micro  P={result['micro_precision']:.3f}  "
               f"R={result['micro_recall']:.3f}  F1={result['micro_f1']:.3f}")
 
+        train_counts = train_events['eID'].astype(str).str.replace(r'\.0$', '', regex=True).value_counts()
+        val_counts   = val_events['eID'].astype(str).str.replace(r'\.0$', '', regex=True).value_counts()
         for eid in sorted(result['eID_metrics'].keys(), key=str):
             m = result['eID_metrics'][eid]
             tp, fp, fn = m['tp'], m['fp'], m['fn']
@@ -187,7 +270,8 @@ def run_k_fold_cross_evaluation(
             per_event_row = {
                 'fold': f"{fold} - {eid}",
                 'eID': eid,
-                'n_occurrences': int(val_events['eID'].value_counts().get(eid, 0)),
+                'n_val_occurrences':   int(val_counts.get(eid, 0)),
+                'n_train_occurrences': int(train_counts.get(eid, 0)),
                 'tp_s': tp,
                 'fp_s': fp,
                 'fn_s': fn,
@@ -204,6 +288,17 @@ def run_k_fold_cross_evaluation(
     report_df.to_excel(report_path, index=False)
     print(f"\nEvaluation report saved to: {report_path}")
 
+    # ---- Save run config ----
+    run_config = {
+        'baseline': baseline,
+        'n_splits': n_splits,
+        'confidence_threshold': confidence_threshold,
+        'sig_buffer_s': sig_buffer_s,
+    }
+    with open(output_path / 'run_config.json', 'w') as f:
+        json.dump(run_config, f, indent=2)
+    print(f"Run config saved to: {output_path / 'run_config.json'}")
+
     return report_df
 
 
@@ -213,14 +308,17 @@ def run_k_fold_cross_evaluation(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='K-fold cross-evaluation: split → train SVM → infer → evaluate'
+        description='K-fold cross-evaluation: split → train → infer → evaluate'
     )
-    parser.add_argument('signals_file',  help='Path to signals xlsx file')
-    parser.add_argument('events_file',   help='Path to events xlsx file')
+    parser.add_argument('signals_file',  help='Path to signals csv file')
+    parser.add_argument('events_file',   help='Path to events csv file')
     parser.add_argument('output_dir',    help='Directory for plots and evaluation-report.xlsx')
     parser.add_argument('n_splits',      type=int, help='Number of folds (k)')
-    parser.add_argument('--confidence-threshold', type=float, default=0.7,
+    parser.add_argument('--confidence-threshold', type=float, default=None,
                         help='Confidence threshold for inference (default: 0.7)')
+    parser.add_argument('--baseline', type=str, default='svm',
+                        choices=['svm', 'rocket'],
+                        help="Baseline model to use: 'svm' (default) or 'rocket' (MiniRocket)")
 
     args = parser.parse_args()
 
@@ -230,6 +328,7 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         n_splits=args.n_splits,
         confidence_threshold=args.confidence_threshold,
+        baseline=args.baseline,
     )
 
-    print("\n✓ K-fold cross-evaluation complete!")
+    print(f"\n✓ K-fold cross-evaluation complete! (baseline: {args.baseline})")

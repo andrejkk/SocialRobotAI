@@ -1,6 +1,6 @@
 # Problem
 
-This project is a machine learning project for events recognition on time series (signals). SVM (support vector machine) classifier is used for recognition. Events can be instantaneous (time_start == time_end) or intervals.
+This project is a machine learning project for events recognition on time series (signals). SVM (support vector machine) classifier is used for recognition. Events can be instantaneous (time_start == time_end) or intervals (time_start < time_end).
 
 ## Example data for signals (defined in xlsx file):
 
@@ -27,6 +27,11 @@ time_start time_end eID
 ## Evaluation
 
 Defined in: `./evaluation/eval_utils.py` and `./evaluation/evaluation.py`
+True Positive (TP) = Correctly overlapped time between real and simulated segments
+False Positive (FP) = Extra predicted time outside the real activity
+False Negative (FN) = Missed real activity time not covered by prediction
+
+K-fold-cross validation is being used
 
 ## Train
 

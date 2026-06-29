@@ -1,0 +1,22 @@
+{
+  "window_size": 1.5,
+  "time_step": 0.25,
+  "no_event_ratio": 1.0,
+  "event_tolerance": 1.0,
+  "num_kernels": 10000,
+
+  "classifier": "svc_rbf",
+
+  "balance_strategy": "per_class",
+  "samples_per_class": null,
+
+  "normalize_signals": true,
+
+  "exclude_eids": [],
+  "min_occurrences": 3,
+
+  "confidence_threshold": 0.3,
+
+  "gap_threshold": 2.0,
+  "min_duration": 0.3
+}

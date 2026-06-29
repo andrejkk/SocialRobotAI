@@ -98,14 +98,14 @@ if current_value is not None and current_value != 0:
 
 events_df = pd.DataFrame(events_list)
 
-# Save to Excel files
-sigs_df.to_excel('sigs.xlsx', index=False, engine='openpyxl')
-events_df.to_excel('events.xlsx', index=False, engine='openpyxl')
+# Save to CSV files
+sigs_df.to_csv('sigs.csv', index=False)
+events_df.to_csv('events.csv', index=False)
 
 print(f"\nSaved {len(sigs_df)} signal rows")
 print(f"Signal columns included: {len(SIGNAL_COLUMNS_1BASED)} columns")
 print(f"Original 1-based columns: {SIGNAL_COLUMNS_1BASED}")
-print(f"sigs.xlsx shape: {sigs_df.shape}")
-print(f"events.xlsx shape: {events_df.shape} - columns: {list(events_df.columns)}")
+print(f"sigs.csv shape: {sigs_df.shape}")
+print(f"events.csv shape: {events_df.shape} - columns: {list(events_df.columns)}")
 print(f"Total events (intervals): {len(events_df)}")
 print("\nFiles saved successfully!")

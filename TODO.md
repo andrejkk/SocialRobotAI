@@ -47,6 +47,12 @@
 - fix k-fold for Oppo db ✅
 - try different params: sig_buffer_s
 
+## 12.6.
+
+- to evaluation report, add class count ✅
+- try with svc linear ✅
+- run svc on adl123
+
 ## K-Fold Cross-Validation
 
 - what if we get lucky on a test set -> use cross-validation

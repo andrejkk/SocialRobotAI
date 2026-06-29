@@ -60,11 +60,10 @@ def _save_statistics(train_events, test_events, all_events, output_path):
         })
     summary_df = pd.DataFrame(summary_rows)
 
-    with pd.ExcelWriter(output_path / 'split_statistics.xlsx') as writer:
-        summary_df.to_excel(writer, sheet_name='Summary', index=False)
-        combined.to_excel(writer, sheet_name='Per-class stats', index=False)
+    summary_df.to_csv(output_path / 'split_statistics_summary.csv', index=False)
+    combined.to_csv(output_path / 'split_statistics_per_class.csv', index=False)
 
-    print(f"\nStatistics saved to: {output_path / 'split_statistics.xlsx'}")
+    print(f"\nStatistics saved to: {output_path / 'split_statistics_summary.csv'} and split_statistics_per_class.csv")
     return summary_df, combined
 
 
@@ -164,10 +163,10 @@ def split_data(sigs_file, events_file, output_dir='train-test-split', test_size=
     - test_size: Fraction of events to use as test set (default: 0.2)
     """
     print(f"Loading signals from: {sigs_file}")
-    sigs_df = pd.read_excel(sigs_file).sort_values("time_s").reset_index(drop=True)
+    sigs_df = pd.read_csv(sigs_file).sort_values("time_s").reset_index(drop=True)
 
     print(f"Loading events from: {events_file}")
-    events_df = pd.read_excel(events_file).sort_values("time_start").reset_index(drop=True)
+    events_df = pd.read_csv(events_file).sort_values("time_start").reset_index(drop=True)
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -190,18 +189,18 @@ def split_data(sigs_file, events_file, output_dir='train-test-split', test_size=
     train_sigs = sigs_df[sigs_df['time_s'] <= train_time_end].reset_index(drop=True)
     test_sigs = sigs_df[(sigs_df['time_s'] >= test_time_start - buffer)].reset_index(drop=True)
 
-    train_events.to_excel(output_path / 'train_events.xlsx', index=False)
-    test_events.to_excel(output_path / 'test_events.xlsx', index=False)
-    train_sigs.to_excel(output_path / 'train_signals.xlsx', index=False)
-    test_sigs.to_excel(output_path / 'test_signals.xlsx', index=False)
+    train_events.to_csv(output_path / 'train_events.csv', index=False)
+    test_events.to_csv(output_path / 'test_events.csv', index=False)
+    train_sigs.to_csv(output_path / 'train_signals.csv', index=False)
+    test_sigs.to_csv(output_path / 'test_signals.csv', index=False)
 
     print(f"\nTrain set: {len(train_events)} events, {len(train_sigs)} signal samples")
     print(f"  Time range: [{train_events['time_start'].min():.2f}s - {train_time_end:.2f}s]")
     print(f"Test set:  {len(test_events)} events, {len(test_sigs)} signal samples")
     print(f"  Time range: [{test_time_start:.2f}s - {test_events['time_end'].max():.2f}s]")
     print(f"\nFiles saved to: {output_path}/")
-    print(f"  train_events.xlsx, train_signals.xlsx")
-    print(f"  test_events.xlsx,  test_signals.xlsx")
+    print(f"  train_events.csv, train_signals.csv")
+    print(f"  test_events.csv,  test_signals.csv")
 
     _save_statistics(train_events, test_events, events_df, output_path)
     _save_plots(train_events, test_events, events_df, output_path)
@@ -209,8 +208,8 @@ def split_data(sigs_file, events_file, output_dir='train-test-split', test_size=
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Split signals and events data into train and test sets')
-    parser.add_argument('signals_file', help='Path to signals xlsx file')
-    parser.add_argument('events_file', help='Path to events xlsx file')
+    parser.add_argument('signals_file', help='Path to signals csv file')
+    parser.add_argument('events_file', help='Path to events csv file')
     parser.add_argument('--output_dir', default='train-test-splits', help='Output directory (default: train-test-splits)')
     parser.add_argument('--test_size', type=float, default=0.2, help='Fraction of events for test set (default: 0.2)')
 
