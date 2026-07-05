@@ -1,6 +1,6 @@
-import sys
 import json
 import argparse
+import importlib.util
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -9,8 +9,15 @@ from sklearn.model_selection import StratifiedKFold
 # -------------------------------------------------------------------
 # Resolve paths to shared utilities
 # -------------------------------------------------------------------
-_HERE = Path(__file__).parent
+_HERE = Path(__file__).resolve().parent
 from eval_utils  import evaluate_events, plot_signals_with_events, compute_timing_differences
+
+
+def _load_module(module_name, module_path):
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _read_table(path):
@@ -22,17 +29,17 @@ def _read_table(path):
 
 
 def _load_baseline(baseline_name):
-    """Import baseline utilities and return (build_dataset, create_model, run_inference, config_path)."""
+    """Import baseline utilities and return (build_dataset, create_model, run_inference, config_path, module)."""
     if baseline_name == 'svm':
-        sys.path.insert(0, str(_HERE.parent / 'baselines' / 'svm-baseline'))
-        from svm_utils import build_dataset, create_model, run_inference
-        config_path = _HERE.parent / 'baselines' / 'svm-baseline' / 'config.json'
-        return build_dataset, create_model, run_inference, config_path
+        baseline_dir = _HERE.parent / 'baselines' / 'svm-baseline'
+        module = _load_module('svm_utils_eval', baseline_dir / 'svm_utils.py')
+        config_path = baseline_dir / 'config.json'
+        return module.build_dataset, module.create_model, module.run_inference, config_path, module
     elif baseline_name == 'rocket':
-        sys.path.insert(0, str(_HERE.parent / 'baselines' / 'rocket-baseline'))
-        from rocket_utils import build_dataset, create_model, run_inference
-        config_path = _HERE.parent / 'baselines' / 'rocket-baseline' / 'config.json'
-        return build_dataset, create_model, run_inference, config_path
+        baseline_dir = _HERE.parent / 'baselines' / 'rocket-baseline'
+        module = _load_module('rocket_utils_eval', baseline_dir / 'rocket_utils.py')
+        config_path = baseline_dir / 'config.json'
+        return module.build_dataset, module.create_model, module.run_inference, config_path, module
     else:
         raise ValueError(f"Unknown baseline: {baseline_name}. Use 'svm' or 'rocket'.")
 
@@ -79,8 +86,12 @@ def run_k_fold_cross_evaluation(
     confidence_threshold=0.7,
     sig_buffer_s=5.0,
     baseline='svm',
+    signal_generator=None,
+    event_generator=None,
+    recognition_model=None,
+    dataset_name=None,
 ):
-    build_dataset, create_model, run_inference, config_path = _load_baseline(baseline)
+    build_dataset, create_model, run_inference, config_path, baseline_module = _load_baseline(baseline)
 
     sigs_df   = _read_table(sigs_file).sort_values('time_s').reset_index(drop=True)
     events_df = _read_table(events_file).sort_values('time_start').reset_index(drop=True)
@@ -91,7 +102,8 @@ def run_k_fold_cross_evaluation(
     # Per-channel z-normalization helpers (rocket baseline only)
     normalize_signals = compute_norm_stats = None
     if baseline == 'rocket' and config.get('normalize_signals', False):
-        from rocket_utils import compute_norm_stats, normalize_signals
+        compute_norm_stats = baseline_module.compute_norm_stats
+        normalize_signals = baseline_module.normalize_signals
 
     # ---- Drop excluded / rare event classes ----
     exclude_eids = {str(e) for e in config.get('exclude_eids', [])}
@@ -118,6 +130,13 @@ def run_k_fold_cross_evaluation(
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    metadata = {
+        'signal_generation_model': signal_generator,
+        'event_generation_model': event_generator,
+        'recognition_model': recognition_model or baseline,
+        'dataset_name': dataset_name,
+    }
 
     report_rows = []
 
@@ -239,6 +258,7 @@ def run_k_fold_cross_evaluation(
         # ---- Accumulate report row ----
         row = _fold_stats(fold, val_events)
         row.update({
+            **metadata,
             'tp_s':             result['tp'],
             'fp_s':             result['fp'],
             'fn_s':             result['fn'],
@@ -268,6 +288,7 @@ def run_k_fold_cross_evaluation(
             
             # Add per-event row to report
             per_event_row = {
+                **metadata,
                 'fold': f"{fold} - {eid}",
                 'eID': eid,
                 'n_val_occurrences':   int(val_counts.get(eid, 0)),
@@ -286,7 +307,10 @@ def run_k_fold_cross_evaluation(
     report_df = pd.DataFrame(report_rows)
     report_path = output_path / 'evaluation-report.xlsx'
     report_df.to_excel(report_path, index=False)
+    report_csv_path = output_path / 'evaluation-report.csv'
+    report_df.to_csv(report_csv_path, index=False)
     print(f"\nEvaluation report saved to: {report_path}")
+    print(f"Evaluation report CSV saved to: {report_csv_path}")
 
     # ---- Save run config ----
     run_config = {
@@ -294,6 +318,7 @@ def run_k_fold_cross_evaluation(
         'n_splits': n_splits,
         'confidence_threshold': confidence_threshold,
         'sig_buffer_s': sig_buffer_s,
+        **metadata,
     }
     with open(output_path / 'run_config.json', 'w') as f:
         json.dump(run_config, f, indent=2)
@@ -319,6 +344,14 @@ if __name__ == "__main__":
     parser.add_argument('--baseline', type=str, default='svm',
                         choices=['svm', 'rocket'],
                         help="Baseline model to use: 'svm' (default) or 'rocket' (MiniRocket)")
+    parser.add_argument('--signal-generator', default=None,
+                        help='Metadata: signal generation model used for this dataset')
+    parser.add_argument('--event-generator', default=None,
+                        help='Metadata: event generation model used for this dataset')
+    parser.add_argument('--recognition-model', default=None,
+                        help='Metadata: recognition model label to write into the report')
+    parser.add_argument('--dataset-name', default=None,
+                        help='Metadata: dataset or experiment name')
 
     args = parser.parse_args()
 
@@ -329,6 +362,10 @@ if __name__ == "__main__":
         n_splits=args.n_splits,
         confidence_threshold=args.confidence_threshold,
         baseline=args.baseline,
+        signal_generator=args.signal_generator,
+        event_generator=args.event_generator,
+        recognition_model=args.recognition_model,
+        dataset_name=args.dataset_name,
     )
 
     print(f"\n✓ K-fold cross-evaluation complete! (baseline: {args.baseline})")

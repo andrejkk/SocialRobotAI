@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import signal, stats
+from pathlib import Path
 
 
 
@@ -86,6 +87,60 @@ def generate_signals_Ap(
             x[t] = np.dot(a, x[t-p:t][::-1]) + eps[t]
 
         x += mu
+        sigs[f"sig_{i+1}"] = x
+
+    return pd.DataFrame({"time_s": time_s, **sigs})
+
+
+def generate_signals_ARMA(
+    N,
+    f_0,
+    T,
+    mu_std,
+    ar_params,
+    ma_params,
+    seed=42
+):
+    """
+    Generate N stationary ARMA(p, q) time series.
+
+    This is the first ARIMA milestone with integration order d=0. It keeps
+    the output format identical to generate_signals_Ap so downstream event
+    generation and evaluation can be reused unchanged.
+
+    ar_params: list of AR coefficient lists, one per signal
+    ma_params: list of MA coefficient lists, one per signal
+    """
+    rng = np.random.default_rng(seed)
+    n_samples = int(T * f_0)
+    time_s = np.arange(n_samples) / f_0
+
+    sigs = {}
+
+    for i in range(N):
+        mu, std = mu_std[i]
+        ar = np.array(ar_params[i], dtype=float)
+        ma = np.array(ma_params[i], dtype=float)
+
+        if np.sum(np.abs(ar)) >= 1.0:
+            raise ValueError(
+                f"AR coefficients for sig_{i + 1} are not safely stationary: {ar.tolist()}"
+            )
+
+        burn_in = max(100, 5 * max(len(ar), len(ma), 1))
+        eps = rng.normal(0, std, size=n_samples + burn_in)
+
+        # scipy.signal.lfilter uses denominator [1, -a1, -a2, ...] for
+        # x_t = a1*x_{t-1} + ... + eps_t + b1*eps_{t-1} + ...
+        numerator = np.r_[1.0, ma]
+        denominator = np.r_[1.0, -ar]
+        x = signal.lfilter(numerator, denominator, eps)[burn_in:]
+
+        x_std = np.std(x)
+        if x_std > 0:
+            x = (x - np.mean(x)) / x_std * std
+        x += mu
+
         sigs[f"sig_{i+1}"] = x
 
     return pd.DataFrame({"time_s": time_s, **sigs})
@@ -195,7 +250,7 @@ def plot_sigs(
     plt.show()
 
 
-def basic_event_stats(events_X_df):
+def basic_event_stats(events_X_df, plot=True):
     """
     Compute basic statistics and plot histograms for events.
 
@@ -211,6 +266,19 @@ def basic_event_stats(events_X_df):
     """
 
     df = events_X_df.copy()
+
+    if len(df) == 0:
+        return {
+            "overall": {
+                "total_events": 0,
+                "unique_event_types": 0,
+                "time_span_s": 0,
+                "event_counts": {},
+                "imbalance_ratio": None,
+                "warnings": ["no_events"]
+            },
+            "per_event": {}
+        }
 
     # --- 1. CLEANING ---
     # Check if interval-based or point-based format
@@ -234,12 +302,27 @@ def basic_event_stats(events_X_df):
     duration = df[time_col].max() - df[time_col].min()
 
     event_counts = df['eID'].value_counts().sort_index()
+    imbalance_ratio = None
+    if len(event_counts) > 0 and event_counts.min() > 0:
+        imbalance_ratio = round(event_counts.max() / event_counts.min(), 3)
+
+    warnings = []
+    if total_events == 0:
+        warnings.append("no_events")
+    if unique_events <= 1:
+        warnings.append("one_or_zero_event_classes")
+    if total_events < 10:
+        warnings.append("few_events")
+    if imbalance_ratio is not None and imbalance_ratio > 10:
+        warnings.append("high_class_imbalance")
 
     overall_stats = {
         "total_events": total_events,
         "unique_event_types": unique_events,
         "time_span_s": duration,
-        "event_counts": event_counts.to_dict()
+        "event_counts": event_counts.to_dict(),
+        "imbalance_ratio": imbalance_ratio,
+        "warnings": warnings
     }
 
     # --- 3. PER-EVENT STATISTICS ---
@@ -249,24 +332,34 @@ def basic_event_stats(events_X_df):
         times = group[time_col].values
         inter_times = np.diff(times) if len(times) > 1 else np.array([])
 
+        if 'time_start' in group.columns and 'time_end' in group.columns:
+            durations = group['time_end'].values - group['time_start'].values
+        else:
+            durations = np.zeros(len(group))
+
         per_event_stats[eid] = {
             "count": len(times),
             "first_time": times.min(),
             "last_time": times.max(),
+            "total_duration_s": float(np.sum(durations)),
+            "mean_duration_s": float(np.mean(durations)) if len(durations) else None,
+            "min_duration_s": float(np.min(durations)) if len(durations) else None,
+            "max_duration_s": float(np.max(durations)) if len(durations) else None,
             "mean_inter_event_time": inter_times.mean() if len(inter_times) else None,
             "std_inter_event_time": inter_times.std() if len(inter_times) else None
         }
 
     # --- 4. PLOTTING ---
 
-    # Histogram: event counts
-    plt.figure()
-    event_counts.plot(kind='bar')
-    plt.xlabel("Event ID")
-    plt.ylabel("Count")
-    plt.title("Number of occurrences per event type")
-    plt.tight_layout()
-    plt.show()
+    if plot:
+        # Histogram: event counts
+        plt.figure()
+        event_counts.plot(kind='bar')
+        plt.xlabel("Event ID")
+        plt.ylabel("Count")
+        plt.title("Number of occurrences per event type")
+        plt.tight_layout()
+        plt.show()
 
     # Histograms: timestamps per event
     '''
@@ -288,6 +381,39 @@ def basic_event_stats(events_X_df):
     }
 
     return stats
+
+
+def event_stats_tables(events_df):
+    """Return summary and per-class event statistics as DataFrames."""
+    stats_dict = basic_event_stats(events_df, plot=False)
+    overall = stats_dict["overall"]
+
+    summary_df = pd.DataFrame([{
+        "total_events": overall["total_events"],
+        "unique_event_types": overall["unique_event_types"],
+        "time_span_s": overall["time_span_s"],
+        "imbalance_ratio": overall["imbalance_ratio"],
+        "warnings": ";".join(overall["warnings"]),
+    }])
+
+    per_class_rows = []
+    for eid, event_stats in stats_dict["per_event"].items():
+        per_class_rows.append({"eID": eid, **event_stats})
+    per_class_df = pd.DataFrame(per_class_rows)
+
+    return summary_df, per_class_df
+
+
+def save_event_stats(events_df, output_dir):
+    """Save event statistics to CSV files and return the two DataFrames."""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    summary_df, per_class_df = event_stats_tables(events_df)
+    summary_df.to_csv(output_path / "event_stats_summary.csv", index=False)
+    per_class_df.to_csv(output_path / "event_stats_per_class.csv", index=False)
+
+    return summary_df, per_class_df
 
 
 def filter_close_intervals(events_df, min_gap_s=1.0):
