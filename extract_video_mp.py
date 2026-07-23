@@ -1,7 +1,8 @@
 import os
-from deepface_detection import process_handler
+from deepface_detection_mp import process_handler
 import multiprocessing as mproc
 import queue
+import time
 # import torch
 # import torchvision
 
@@ -73,9 +74,11 @@ class ProcessFrames:
         if detected_bboxes:
             x, y, w, h = detected_bboxes[0]["bbox"]
             conf_score = detected_bboxes[0]["conf"]
+            detected_emotion = detected_bboxes[0]["emo"]
+
             new_tracker = self.initialize_tracker(currentframe, (x, y, w, h))
             
-            detection_conf_score = "RE-INITED BBOX WITH" + str(conf_score)
+            detection_conf_score = "EMO: " + str(detected_emotion)
 
             cv2.rectangle(
                 currentframe, (x, y), (x + w, y + h), (255, 255, 128), 1
@@ -111,9 +114,11 @@ class ProcessFrames:
             print("Worker je ševedno busy")
             pass  # worker still busy on a previous frame - skip this request
 
+    #def check_previous_frames(self, currentframe, trackers):
+
+
     def process_frames(self):
         import cv2
-        # import pandas as pd
         import mediapipe as mp
         # tole dej v init
         # self.df = DetectFace()
@@ -122,15 +127,24 @@ class ProcessFrames:
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
             min_detection_confidence=0.5, min_tracking_confidence=0.4
-        )  # kakšen naj bo optimalen confidence tu?
+        )  
+        # kakšen naj bo optimalen confidence tu?
 
         frameId = 0
-
+        last_timestamp = 0
         while cap.isOpened():
             ret, currentframe = cap.read()
             if not ret:
                 print("Napaka pri zajemanju videa ali EOF videa")
                 break
+            
+            time_s = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+            frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) #tud nedela
+            fps = cap.get(cv2.CAP_PROP_FPS) #nedela
+            print(f"TIME JE: {time_s:.2f} s")
+            print(f"ŠT FRAMEOV JE: {frame_count} frames")
+            print(f"fps JE: {fps} frames")
+            
             # TODO a morem to kam drgam postavit?
             self.collect_mprocess_detection_result(currentframe, frameId)
             self.request_mprocess_detection(currentframe, frameId)
@@ -143,8 +157,6 @@ class ProcessFrames:
                 if results_pose.pose_landmarks
                 else None
             )
-
-            time_s = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
 
             if self.trackers:
                 #print("Not N-th frame, skipping detection...")
@@ -199,6 +211,7 @@ class ProcessFrames:
                 cv2.destroyAllWindows() # a to rabim tu al v finally, pa dam tu samo break?
 
             frameId += 1
+            last_timestamp = time_s
         # finally: #a rabm to tuki??? ne če je v mainu?? TODO
         #     cap.release()
         #     cv2.destroyAllWindows()
@@ -210,15 +223,14 @@ class ProcessFrames:
         #             self.detection_process.terminate()
         # df_timeseries = pd.DataFrame(rows)
         # return df_timeseries
-        return []
+        return frameId, last_timestamp
 
 
 if __name__ == "__main__":
     import cv2
-
     mproc.set_start_method("spawn", force=True)
     request_queue = mproc.Queue(maxsize=1)
-    result_queue = mproc.Queue(maxsize=1) #al nej mam maxsize 2??
+    result_queue = mproc.Queue(maxsize=1)
     
     ready_event = mproc.Event()
     stop_event = mproc.Event()
@@ -230,24 +242,46 @@ if __name__ == "__main__":
     )
     video_files = []
     for root, dirs, files in os.walk("Data"):
-        # print("Searching for files in: ", root)
         for file in files:
             if os.path.isfile(os.path.join(root, file)) and file.lower().endswith(
                 ".webm"
             ):
-                #print("Found videofile: ", file)
+                print("Found videofile: ", file)
                 video_files.append(os.path.join(root, file))
     
     worker.start()
     ready_event.wait()
     csv_id = 0
+
     try:
         for video in video_files:
+            # cap = cv2.VideoCapture(video)
+            # total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            # fps = cap.get(cv2.CAP_PROP_FPS)
+            # trajanje_posnetka = total_frames / fps
+            # cap.release()
+
+            start_time = time.perf_counter()
             pf = ProcessFrames(video, request_queue, result_queue, stop_event)
-            df = pf.process_frames()
+            processed_frames, trajanje = pf.process_frames()
             
-            df.to_csv(f"timeseries_{csv_id}.csv", index=False)
-            print(f"Saved {len(df)} frames to timeseries.csv from video {video}")
+            end_time = time.perf_counter()
+
+            trajanje_videa = processed_frames / trajanje
+            
+            total_time = end_time - start_time
+            zaostanek = total_time - trajanje_videa
+
+            print(f"za Video: {video}")
+            print(f"Trajanje: {trajanje} sekund")
+            print(f"Število prebranih okvirjev: {processed_frames} okvirjev")
+            print(f"Trajanje videa: {trajanje_videa} sekund")
+            # print(f"Število okvirjev: {total_frames} okvirjev")
+            # print(f"FPS videa: {fps} s")
+            print(f"Total processing time: {total_time:.2f} s")
+            print(f"Processing delay: {zaostanek:.2f} s")
+            # df.to_csv(f"timeseries_{csv_id}.csv", index=False)
+            # print(f"Saved {len(df)} frames to timeseries.csv from video {video}")
             csv_id += 1
     finally:
         stop_event.set()
@@ -257,10 +291,7 @@ if __name__ == "__main__":
             worker.join() #a ta join je tu potreben al mam sam tega pred ifom?
 
     # vivit = False  # flag for vivit execution
-    # # model_name = "google/vivit-b-16x2-kinetics400"
-    # # model = "yolo_v8m.pt"
     # # emotion_model="mobilenetv3
-
     # if not vivit:
     #     ############ PROCESS FRAMES FOR EACH VIDEO ############
     #     csvid = 0
