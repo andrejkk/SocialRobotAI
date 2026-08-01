@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://socialrobotai/gendata/pipeline/pipeline_config.schema.json",
+  "title": "GenData Pipeline Config",
+  "description": "Configuration for a single signal-generator x event-generator data-generation run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["signal_gen", "event_gen", "signals", "predefined", "ml", "output"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional reference to this JSON schema."
+    },
+    "signal_gen": {
+      "type": "string",
+      "enum": ["AR", "ARIMA"],
+      "description": "Active signal generator."
+    },
+    "event_gen": {
+      "type": "string",
+      "enum": ["predefined", "ml"],
+      "description": "Active event generator."
+    },
+    "signals": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Signal generation parameters.",
+      "required": ["N", "f0", "T", "seed", "mu_std", "ar_timescales"],
+      "properties": {
+        "N": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of signals to generate (sig_1 ... sig_N)."
+        },
+        "f0": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Sampling frequency in Hz."
+        },
+        "T": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Total signal duration in seconds."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Random seed for reproducibility."
+        },
+        "mu_std": {
+          "type": "array",
+          "description": "Per-signal [mean, std]. One entry per signal.",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "description": "[mean, std] for one signal.",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": [
+              { "type": "number", "description": "Mean." },
+              { "type": "number", "minimum": 0, "description": "Standard deviation." }
+            ]
+          }
+        },
+        "ar_timescales": {
+          "type": "array",
+          "description": "Per-signal [tau_s, p] used to build AR(p) coefficients via ar_from_timescale.",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "description": "[tau_s, p] for one signal.",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": [
+              { "type": "number", "exclusiveMinimum": 0, "description": "AR decay timescale in seconds." },
+              { "type": "integer", "minimum": 1, "description": "AR order p." }
+            ]
+          }
+        },
+        "ma_params": {
+          "type": "array",
+          "description": "Per-signal MA(q) coefficient lists. Used only by the ARIMA generator.",
+          "items": {
+            "type": "array",
+            "description": "MA coefficients for one signal (empty list = no MA terms).",
+            "items": { "type": "number" }
+          }
+        },
+        "d": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Order of integration (differencing). Used only by the ARIMA generator."
+        }
+      }
+    },
+    "predefined": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Predefined (criteria-based) event generation parameters.",
+      "required": ["window_s", "min_gap_s", "event_defs_path"],
+      "properties": {
+        "window_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Sliding window size in seconds for evaluating event criteria."
+        },
+        "min_gap_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum gap in seconds between successive kept intervals."
+        },
+        "event_defs_path": {
+          "description": "Path to the event definitions JSON (relative to the config file or absolute). May be a single string shared by all signal generators, or an object mapping signal generator name (e.g. AR, ARIMA) to a path, optionally with a 'default' fallback key.",
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "type": "string" },
+              "properties": {
+                "AR": { "type": "string" },
+                "ARIMA": { "type": "string" },
+                "default": { "type": "string" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ml": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ML-model event generation parameters (SVM baseline).",
+      "required": ["confidence_threshold", "svm_config_path"],
+      "properties": {
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum SVM probability required to accept a detection."
+        },
+        "svm_config_path": {
+          "type": "string",
+          "description": "Path to the SVM baseline config.json (relative to the config file or absolute)."
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Output settings.",
+      "required": ["output_dir"],
+      "properties": {
+        "output_dir": {
+          "type": "string",
+          "description": "Root output directory (relative to the config file or absolute). Datasets are written to <output_dir>/<signal_gen>_<event_gen>/."
+        }
+      }
+    }
+  }
+}

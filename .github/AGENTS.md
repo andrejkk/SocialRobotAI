@@ -24,6 +24,10 @@ time_start time_end eID
 129.35 131.75 eID_1
 171.2 172.75 eID_5
 
+## Recognition algorithms
+- Baseline algorithm: SVM classifier with manually selected features (baselines/svm-baseline)
+- Advanced algorithm: MiniRocket classifier (baselines/rocket-baseline)
+
 ## Evaluation
 
 Defined in: `./evaluation/eval_utils.py` and `./evaluation/evaluation.py`

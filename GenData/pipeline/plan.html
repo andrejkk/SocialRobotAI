@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GenData Pipeline — Plan</title>
+<style>
+  :root { --bg:#0f1420; --card:#171e2e; --ink:#e6e9f0; --mut:#9aa4b8; --acc:#5b9dff; --line:#26304a; --ok:#3ecf8e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         background:var(--bg); color:var(--ink); padding:32px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:var(--mut); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:18px 22px; margin:0 0 16px; }
+  h2 { font-size:16px; margin:0 0 10px; color:var(--acc); }
+  code { background:#0c1120; border:1px solid var(--line); border-radius:5px;
+         padding:1px 6px; font-family:"SF Mono",Menlo,Consolas,monospace; font-size:13px; }
+  ul { margin:6px 0; padding-left:20px; } li { margin:3px 0; }
+  table { width:100%; border-collapse:collapse; margin-top:6px; font-size:14px; }
+  th,td { border:1px solid var(--line); padding:7px 10px; text-align:left; }
+  th { color:var(--mut); font-weight:600; background:#111726; }
+  .pill { display:inline-block; background:#12213a; color:var(--acc);
+          border:1px solid var(--line); border-radius:999px; padding:1px 10px; font-size:12px; margin-right:6px; }
+  .cmd { background:#0c1120; border:1px solid var(--line); border-radius:8px;
+         padding:12px 14px; font-family:"SF Mono",Menlo,Consolas,monospace; font-size:13px; overflow-x:auto; }
+  .note { color:var(--mut); font-size:13px; }
+  b.ok { color:var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GenData Pipeline — Data Generation Plan</h1>
+  <p class="sub">Modular generator: <b>AR / ARIMA</b> signals &times; <b>predefined / ML-model</b> events. CSV output. Isolated in <code>GenData/pipeline/</code>.</p>
+
+  <div class="card">
+    <h2>Goal</h2>
+    <p>Upgrade the generator to produce datasets for any combination of a <b>signal generator</b> and an <b>event generator</b>. Scope is <b>data generation only</b> &mdash; recognition models (SVM / Rocket) are run later with existing scripts. Nothing in <code>baselines/</code> or <code>evaluation/</code> is modified.</p>
+  </div>
+
+  <div class="card">
+    <h2>Dimensions</h2>
+    <table>
+      <tr><th>Signal generator</th><th>Event generator</th></tr>
+      <tr><td>AR (reuse <code>generate_signals_Ap</code>)</td><td>predefined (criteria on windows)</td></tr>
+      <tr><td>ARIMA (new: AR(p)+MA(q)+differencing d)</td><td>ML model (SVM trained on predefined data, then infers events)</td></tr>
+    </table>
+    <p class="note">4 datasets total (2 &times; 2). The recognition-model column is downstream, not part of generation.</p>
+  </div>
+
+  <div class="card">
+    <h2>How to run</h2>
+    <p>One combination per invocation &mdash; <b class="ok">no loop</b>. Configure in <code>pipeline_config.json</code>, then run once per combo:</p>
+    <div class="cmd">python run_pipeline.py                                     # uses combo set in config<br>python run_pipeline.py --signal-gen ARIMA --event-gen ml   # override the combo<br>python run_pipeline.py --config my_config.json             # alternate config</div>
+    <p class="note">Edit the config (or pass flags) between runs to produce each dataset yourself.</p>
+  </div>
+
+  <div class="card">
+    <h2>Files created</h2>
+    <ul>
+      <li><code>signal_generators.py</code> &mdash; <code>generate_signals_AR</code> (wraps existing AR(p)); <code>generate_signals_ARIMA</code> (new: ARMA loop + <code>d</code> integrations, then de-trend/rescale).</li>
+      <li><code>event_generators.py</code> &mdash; <code>generate_events_predefined</code> (reuse tools); <code>generate_events_ml</code> (trains SVM via <code>svm_utils</code>, infers events).</li>
+      <li><code>run_pipeline.py</code> &mdash; single-combo CLI entrypoint; prints <code>basic_event_stats</code>, writes CSVs.</li>
+      <li><code>pipeline_config.json</code> &mdash; active combo + all params + output dir.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Reused (imported, not modified)</h2>
+    <ul>
+      <li><code>GenData/generator/signal_generation_tools.py</code> &mdash; <code>generate_signals_Ap</code>, <code>generate_events</code>, <code>events_point_to_interval</code>, <code>filter_close_intervals</code>, <code>basic_event_stats</code>, <code>ar_from_timescale</code>.</li>
+      <li><code>baselines/svm-baseline/svm_utils.py</code> &mdash; <code>build_dataset</code>, <code>create_model</code>, <code>run_inference</code> (added to <code>sys.path</code>; folder name has a hyphen).</li>
+      <li><code>baselines/svm-baseline/config.json</code> &mdash; read-only SVM feature config.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Config keys (pipeline_config.json)</h2>
+    <ul>
+      <li><span class="pill">combo</span> <code>signal_gen</code>: "AR" | "ARIMA" &nbsp; <code>event_gen</code>: "predefined" | "ml"</li>
+      <li><span class="pill">signals</span> <code>N, f0, T, seed, mu_std[]</code>, <code>ar_timescales[[tau,p]]</code>, and for ARIMA <code>ma_params[[...]]</code> + <code>d</code></li>
+      <li><span class="pill">predefined</span> <code>window_s, min_gap_s</code>, and <code>event_defs_path</code> (a shared path string, or a per-signal-generator map, e.g. <code>{AR, ARIMA}</code>, since ARIMA needs thresholds calibrated to its local statistics)</li>
+      <li><span class="pill">ml</span> <code>confidence_threshold, svm_config_path</code></li>
+      <li><span class="pill">output</span> <code>output_dir</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Output</h2>
+    <p><code>GenData/pipeline/output/&lt;signal_gen&gt;_&lt;event_gen&gt;/sigs.csv</code> &amp; <code>events.csv</code></p>
+    <ul>
+      <li><code>sigs.csv</code>: <code>time_s, sig_1 &hellip; sig_N</code></li>
+      <li><code>events.csv</code>: <code>time_start, time_end, eID</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Key decisions</h2>
+    <ul>
+      <li>ML events = SVM trained on the <b>predefined-event synthetic dataset</b>, then inferred on the same signals (channels already match <code>sig_1&hellip;sig_N</code>).</li>
+      <li>ARIMA = manual extension of the AR(p) code (no new dependency).</li>
+      <li>CSV-only output; SVM utils operate on in-memory DataFrames, so the XLSX/CSV CLI mismatch is irrelevant.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

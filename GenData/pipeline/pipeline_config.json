@@ -1,0 +1,52 @@
+{
+  "$schema": "./pipeline_config.schema.json",
+  "signal_gen": "ARIMA",
+  "event_gen": "ml",
+
+  "signals": {
+    "N": 5,
+    "f0": 20,
+    "T": 3600,
+    "seed": 42,
+    "mu_std": [
+      [0.5, 0.1],
+      [0.0, 0.15],
+      [3.0, 0.2],
+      [0.0, 0.05],
+      [1.0, 0.1]
+    ],
+    "ar_timescales": [
+      [8, 5],
+      [3, 3],
+      [4, 4],
+      [2, 6],
+      [5, 3]
+    ],
+    "ma_params": [
+      [0.3],
+      [0.2],
+      [0.25],
+      [0.15],
+      [0.2]
+    ],
+    "d": 1
+  },
+
+  "predefined": {
+    "window_s": 5,
+    "min_gap_s": 1.0,
+    "event_defs_path": {
+      "AR": "../generator/event-defs.json",
+      "ARIMA": "../generator/event-defs-arima.json"
+    }
+  },
+
+  "ml": {
+    "confidence_threshold": 0.7,
+    "svm_config_path": "../../baselines/svm-baseline/config.json"
+  },
+
+  "output": {
+    "output_dir": "output"
+  }
+}
