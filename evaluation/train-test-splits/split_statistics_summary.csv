@@ -1,0 +1,4 @@
+split,n_events,n_classes,imbalance_ratio,majority_class,minority_class,time_start,time_end,duration_covered_s,total_event_duration_s
+all,150,4,2.778,eID_2,eID_3,5.0,3586.6,3581.6,1311.4500000000003
+train,120,4,3.417,eID_2,eID_3,5.0,2717.85,2712.85,973.0000000000001
+test,30,4,1.5,eID_2,eID_3,2737.15,3586.6,849.4499999999998,338.4500000000003

@@ -1,0 +1,6 @@
+fold,n_events,n_classes,imbalance_ratio,majority_class,minority_class,time_start,time_end,duration_covered_s,total_event_duration_s,n_occurrences,tp_s,fp_s,fn_s,macro_precision,macro_recall,macro_f1,micro_precision,micro_recall,micro_f1,plot_file,start_diff_mean,start_diff_min_abs,start_diff_max_abs,end_diff_mean,end_diff_min_abs,end_diff_max_abs,eID
+0,30.0,4.0,1.5,eID_2,eID_3,2737.15,3586.6,849.4499999999998,338.4500000000003,30,340.4500000000003,0.0,0.0,1.0,1.0,1.0,1.0,1.0,1.0,events_evaluation_plot.png,0.0,0.0,0.0,0.0,0.0,0.0,
+0 - eID_1,,,,,,,,,,8,64.55000000000064,0.0,0.0,1.0,1.0,1.0,,,,,,,,,,,eID_1
+0 - eID_2,,,,,,,,,,9,98.89999999999918,0.0,0.0,1.0,1.0,1.0,,,,,,,,,,,eID_2
+0 - eID_3,,,,,,,,,,6,37.400000000000546,0.0,0.0,1.0,1.0,1.0,,,,,,,,,,,eID_3
+0 - eID_5,,,,,,,,,,7,139.5999999999999,0.0,0.0,1.0,1.0,1.0,,,,,,,,,,,eID_5

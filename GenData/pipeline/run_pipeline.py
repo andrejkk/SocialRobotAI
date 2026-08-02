@@ -13,12 +13,17 @@ Examples:
 Output (CSV only):
     <output_dir>/<signal_gen>_<event_gen>/sigs.csv    (time_s, sig_1 ... sig_N)
     <output_dir>/<signal_gen>_<event_gen>/events.csv  (time_start, time_end, eID)
+
+Optional external signals input:
+    --signals-file path/to/sigs.csv
+    If provided, signal generation is skipped and detection runs on that CSV.
 """
 
 import argparse
 import json
 import os
 
+import joblib
 import matplotlib
 matplotlib.use("Agg")  # headless: basic_event_stats plotting must not block CLI runs
 
@@ -28,6 +33,7 @@ import event_generators as eg
 # Reuse basic_event_stats for a quick per-run summary.
 import signal_generation_tools as sgt  # noqa: E402  (path set by imports above)
 
+import pandas as pd
 
 def _resolve(path, base_dir):
     """Resolve a possibly-relative config path against the config's directory."""
@@ -56,6 +62,46 @@ def _select_event_defs_path(event_defs_path, signal_gen):
     return event_defs_path
 
 
+def _validate_ml_inference_only(ml_cfg):
+    """Validate that ML branch runs in inference-only mode."""
+    mode = ml_cfg.get("mode", "inference_only")
+    if mode != "inference_only":
+        raise ValueError(
+            f"Unsupported ml.mode='{mode}'. Only 'inference_only' is allowed."
+        )
+
+
+def _check_leakage_guard(ml_cfg):
+    """Enforce simple leakage checks based on train/inference dataset IDs."""
+    guard = ml_cfg.get("leakage_guard", {})
+    enabled = guard.get("enabled", False)
+    if not enabled:
+        return
+
+    model_meta = ml_cfg.get("model_meta", {})
+    inference_meta = ml_cfg.get("inference_meta", {})
+    train_id = model_meta.get("trained_on_dataset_id")
+    infer_id = inference_meta.get("inference_dataset_id")
+
+    if (not train_id or not infer_id) and guard.get("warn_on_missing_ids", True):
+        print(
+            "[pipeline] WARNING: leakage_guard enabled but dataset IDs are missing "
+            "(model_meta.trained_on_dataset_id / "
+            "inference_meta.inference_dataset_id)."
+        )
+
+    if (
+        train_id
+        and infer_id
+        and train_id == infer_id
+        and guard.get("fail_on_same_dataset_id", True)
+    ):
+        raise ValueError(
+            "Leakage guard failed: model training dataset ID equals "
+            "inference dataset ID. Use a different dataset/split."
+        )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate one signal/event dataset combination."
@@ -71,6 +117,14 @@ def parse_args():
     parser.add_argument(
         "--event-gen", choices=["predefined", "ml"],
         help="Override the event generator from the config.",
+    )
+    parser.add_argument(
+        "--signals-file", default=None,
+        help=(
+            "Optional path to an existing signals CSV (must contain time_s and "
+            "sig_* columns). If provided, signal generation is skipped and "
+            "detection runs on this file."
+        ),
     )
     return parser.parse_args()
 
@@ -92,10 +146,20 @@ def main():
     print(f"[pipeline] signal_gen={signal_gen}  event_gen={event_gen}")
 
     # --- 1. Signals ------------------------------------------------------
-    print("[pipeline] generating signals ...")
-    sigs_df = sg.SIGNAL_GENERATORS[signal_gen](signals_cfg)
+    if args.signals_file:
+        signals_file_path = _resolve(args.signals_file, config_dir)
+        print(f"[pipeline] loading existing signals from {signals_file_path} ...")
+        sigs_df = pd.read_csv(signals_file_path).sort_values("time_s").reset_index(drop=True)
 
-    # --- 2. Predefined events (also the training labels for the ML mode) --
+        if "time_s" not in sigs_df.columns:
+            raise ValueError("signals_file must contain a 'time_s' column.")
+        if not any(c.startswith("sig_") for c in sigs_df.columns):
+            raise ValueError("signals_file must contain at least one 'sig_' column.")
+    else:
+        print("[pipeline] generating signals ...")
+        sigs_df = sg.SIGNAL_GENERATORS[signal_gen](signals_cfg)
+
+    # --- 2. Predefined events ---------------------------------------------
     pre_cfg = config["predefined"]
     event_defs_path = _resolve(
         _select_event_defs_path(pre_cfg["event_defs_path"], signal_gen), config_dir
@@ -117,16 +181,21 @@ def main():
         events_df = predefined_events_df
     elif event_gen == "ml":
         ml_cfg = config["ml"]
+        _validate_ml_inference_only(ml_cfg)
+        _check_leakage_guard(ml_cfg)
+
         svm_config_path = _resolve(ml_cfg["svm_config_path"], config_dir)
         with open(svm_config_path, "r") as f:
             svm_config = json.load(f)
+        model_path = _resolve(ml_cfg["model_path"], config_dir)
+        model = joblib.load(model_path)
 
-        print("[pipeline] training SVM baseline and inferring ML events ...")
+        print("[pipeline] running ML event inference with pre-trained model ...")
         events_df = eg.generate_events_ml(
             sigs_df,
-            predefined_events_df,
             svm_config=svm_config,
             confidence_threshold=ml_cfg["confidence_threshold"],
+            model=model,
         )
     else:
         raise ValueError(f"Unknown event_gen: {event_gen}")

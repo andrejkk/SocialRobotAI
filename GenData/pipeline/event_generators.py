@@ -4,10 +4,9 @@ Event generators for the data-generation pipeline.
 Two generators are provided:
   - predefined : reuses the criteria-based event generation from
                  GenData/generator/signal_generation_tools.py (unchanged).
-  - ML model   : trains the SVM baseline (baselines/svm-baseline/svm_utils.py,
-                 imported unchanged) on the predefined-event dataset, then runs
-                 inference on the same signals; the SVM's detections become the
-                 events.
+    - ML model   : runs inference with a pre-trained SVM baseline model
+                                 (baselines/svm-baseline/svm_utils.py imported unchanged);
+                                 no training is performed in this pipeline.
 
 Both return a pandas DataFrame with columns: time_start, time_end, eID.
 """
@@ -56,32 +55,23 @@ def generate_events_predefined(sigs_df, f_0, window_s, event_defs, min_gap_s):
     return events_df.reset_index(drop=True)
 
 
-def generate_events_ml(sigs_df, predefined_events_df, svm_config,
-                       confidence_threshold):
+def generate_events_ml(sigs_df, svm_config, confidence_threshold, model):
     """
-    Generate events by training the SVM baseline on predefined-event data and
-    running inference on the same signals.
+    Generate events by running inference with a pre-trained SVM model.
 
     Args:
         sigs_df:               signal DataFrame (time_s + sig_*).
-        predefined_events_df:  interval events used as training labels.
         svm_config:            dict loaded from the SVM baseline config.json.
         confidence_threshold:  minimum probability to accept a detection.
+        model:                 pre-trained classifier/pipeline instance.
 
     Returns:
         DataFrame with columns time_start, time_end, eID.
     """
     sig_cols = _sig_cols(sigs_df)
 
-    X, y, _ = svm_utils.build_dataset(
-        sigs_df, predefined_events_df, svm_config, sig_cols
-    )
-
-    clf = svm_utils.create_model()
-    clf.fit(X, y)
-
     detected = svm_utils.run_inference(
-        sigs_df, clf, svm_config, sig_cols,
+        sigs_df, model, svm_config, sig_cols,
         confidence_threshold=confidence_threshold,
     )
 

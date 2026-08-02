@@ -1,7 +1,7 @@
 {
   "$schema": "./pipeline_config.schema.json",
-  "signal_gen": "ARIMA",
-  "event_gen": "ml",
+  "signal_gen": "AR",
+  "event_gen": "predefined",
 
   "signals": {
     "N": 5,
@@ -22,13 +22,7 @@
       [2, 6],
       [5, 3]
     ],
-    "ma_params": [
-      [0.3],
-      [0.2],
-      [0.25],
-      [0.15],
-      [0.2]
-    ],
+    "ma_params": [[0.3], [0.2], [0.25], [0.15], [0.2]],
     "d": 1
   },
 
@@ -42,8 +36,25 @@
   },
 
   "ml": {
+    "mode": "inference_only",
+    "model_path": "../models/svm/svm_pretrained.pkl",
     "confidence_threshold": 0.7,
-    "svm_config_path": "../../baselines/svm-baseline/config.json"
+    "svm_config_path": "../../baselines/svm-baseline/config.json",
+    "model_meta": {
+      "model_id": "svm_v1_ar_trainset_A",
+      "trained_on_dataset_id": "AR_predefined_train_A",
+      "trained_on_split": "train",
+      "trained_by_script": "baselines/svm-baseline/train.py"
+    },
+    "inference_meta": {
+      "inference_dataset_id": "ARIMA_signals_run_2026_08_01",
+      "inference_split": "test_or_unseen"
+    },
+    "leakage_guard": {
+      "enabled": true,
+      "fail_on_same_dataset_id": true,
+      "warn_on_missing_ids": true
+    }
   },
 
   "output": {

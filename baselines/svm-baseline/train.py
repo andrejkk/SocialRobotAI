@@ -14,12 +14,12 @@ from svm_utils import (features_at_time, features_over_interval,
 # ===================================================
 
 parser = argparse.ArgumentParser(description='SVM baseline for event detection')
-parser.add_argument('signals_file', help='Path to signals xlsx file')
-parser.add_argument('events_file', help='Path to events xlsx file')
+parser.add_argument('signals_file', help='Path to signals csv file')
+parser.add_argument('events_file', help='Path to events csv file')
 args = parser.parse_args()
 
-sigs_df = pd.read_excel(args.signals_file)
-events_df = pd.read_excel(args.events_file)
+sigs_df = pd.read_csv(args.signals_file)
+events_df = pd.read_csv(args.events_file)
 
 sigs_df = sigs_df.sort_values("time_s").reset_index(drop=True)
 events_df = events_df.sort_values("time_start").reset_index(drop=True)
@@ -45,7 +45,7 @@ with open("config.json", "r") as f:
 
 X, y, times = build_dataset(sigs_df, events_df, config, sig_cols)
 
-pd.DataFrame(X).to_excel("train_features.xlsx", index=False)
+pd.DataFrame(X).to_csv("train_features.csv", index=False)
 
 #%% ===================================================
 # 5 — Classifier
@@ -102,14 +102,14 @@ pd.DataFrame({
     "time_start": events_df.time_start,
     "time_end": events_df.time_end,
     "eID": events_df.eID
-}).to_excel("true_events.xlsx", index=False)
+}).to_csv("true_events.csv", index=False)
 
-# Save detected events as intervals (same format as true_events.xlsx)
+# Save detected events as intervals (same format as true_events.csv)
 pd.DataFrame({
     "time_start": [interval[0] for interval in detected_intervals],
     "time_end": [interval[1] for interval in detected_intervals],
     "eID": [interval[2] for interval in detected_intervals]
-}).to_excel("detected_events.xlsx", index=False)
+}).to_csv("detected_events.csv", index=False)
 
 # plt.figure()
 # plt.plot(*roc_curve(y!="no_event", 1-clf.predict_proba(X)[:,list(clf.classes_).index("no_event")])[:2])

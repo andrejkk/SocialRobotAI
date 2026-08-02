@@ -5,7 +5,7 @@
   "description": "Configuration for a single signal-generator x event-generator data-generation run.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["signal_gen", "event_gen", "signals", "predefined", "ml", "output"],
+  "required": ["signal_gen", "event_gen", "signals", "predefined", "output"],
   "properties": {
     "$schema": {
       "type": "string",
@@ -57,7 +57,11 @@
             "maxItems": 2,
             "items": [
               { "type": "number", "description": "Mean." },
-              { "type": "number", "minimum": 0, "description": "Standard deviation." }
+              {
+                "type": "number",
+                "minimum": 0,
+                "description": "Standard deviation."
+              }
             ]
           }
         },
@@ -71,7 +75,11 @@
             "minItems": 2,
             "maxItems": 2,
             "items": [
-              { "type": "number", "exclusiveMinimum": 0, "description": "AR decay timescale in seconds." },
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "AR decay timescale in seconds."
+              },
               { "type": "integer", "minimum": 1, "description": "AR order p." }
             ]
           }
@@ -129,9 +137,26 @@
     "ml": {
       "type": "object",
       "additionalProperties": false,
-      "description": "ML-model event generation parameters (SVM baseline).",
-      "required": ["confidence_threshold", "svm_config_path"],
+      "description": "ML-model event generation parameters (SVM baseline, inference only).",
+      "required": [
+        "mode",
+        "model_path",
+        "confidence_threshold",
+        "svm_config_path",
+        "model_meta",
+        "inference_meta",
+        "leakage_guard"
+      ],
       "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["inference_only"],
+          "description": "ML mode supported by pipeline. Training is not allowed in pipeline."
+        },
+        "model_path": {
+          "type": "string",
+          "description": "Path to pre-trained SVM model (.pkl) for inference (relative to config or absolute)."
+        },
         "confidence_threshold": {
           "type": "number",
           "minimum": 0,
@@ -141,6 +166,72 @@
         "svm_config_path": {
           "type": "string",
           "description": "Path to the SVM baseline config.json (relative to the config file or absolute)."
+        },
+        "model_meta": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model_id",
+            "trained_on_dataset_id",
+            "trained_on_split",
+            "trained_by_script"
+          ],
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "description": "Unique model identifier used for reproducibility."
+            },
+            "trained_on_dataset_id": {
+              "type": "string",
+              "description": "Dataset ID used for training the model."
+            },
+            "trained_on_split": {
+              "type": "string",
+              "description": "Training split identifier (e.g. train, fold_0_train)."
+            },
+            "trained_by_script": {
+              "type": "string",
+              "description": "Script path used to train the model."
+            }
+          }
+        },
+        "inference_meta": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inference_dataset_id", "inference_split"],
+          "properties": {
+            "inference_dataset_id": {
+              "type": "string",
+              "description": "Dataset ID on which inference is run."
+            },
+            "inference_split": {
+              "type": "string",
+              "description": "Split identifier used for this inference run."
+            }
+          }
+        },
+        "leakage_guard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "fail_on_same_dataset_id",
+            "warn_on_missing_ids"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable train/inference dataset ID checks."
+            },
+            "fail_on_same_dataset_id": {
+              "type": "boolean",
+              "description": "Fail when training and inference dataset IDs are equal."
+            },
+            "warn_on_missing_ids": {
+              "type": "boolean",
+              "description": "Warn when required leakage-check IDs are missing."
+            }
+          }
         }
       }
     },
@@ -156,5 +247,17 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event_gen": { "const": "ml" }
+        }
+      },
+      "then": {
+        "required": ["ml"]
+      }
+    }
+  ]
 }
