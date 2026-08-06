@@ -1,0 +1,7 @@
+{
+    "eID_1": {
+        "criteria": "mean",
+        "sigs": ["synt_sig_20"],
+        "params": { "thresh": 250.0, "mode": "gt" }
+    }
+}

@@ -126,7 +126,8 @@ def generate_events(
     sigs_X_df,
     f_0,
     window_s=5,
-    event_defs=None
+    event_defs=None,
+    time_col="time_s",
 ):
     """
     event_defs = dict of:
@@ -135,10 +136,19 @@ def generate_events(
     The criteria string is mapped to the corresponding function using CRITERIA_MAPPING.
     """
     events = []
+    if time_col not in sigs_X_df.columns:
+        raise ValueError(f"Missing time column '{time_col}'")
+    if f_0 <= 0:
+        raise ValueError("f_0 must be greater than zero")
+    if window_s <= 0:
+        raise ValueError("window_s must be greater than zero")
+
     win = int(window_s * f_0)
+    if win < 1:
+        raise ValueError("window_s * f_0 must produce at least one sample")
 
     for t_idx in range(win, len(sigs_X_df)):
-        t = sigs_X_df.loc[t_idx, "time_s"]
+        t = sigs_X_df.loc[t_idx, time_col]
 
         for eID, edef in event_defs.items():
             # Map criteria string to function
@@ -331,10 +341,12 @@ def filter_close_intervals(events_df, min_gap_s=1.0):
     return filtered
 
 
-def events_point_to_interval(events_df):
+def events_point_to_interval(events_df, max_gap_s=None):
     """
     Convert point-based events (time_s, eID) to interval-based events (time_start, time_end, eID).
-    Groups consecutive samples with the same eID into intervals.
+    Groups consecutive samples with the same eID into intervals. If max_gap_s
+    is provided, a larger time gap starts a new interval even when the eID is
+    unchanged.
     
     Args:
         events_df: DataFrame with columns 'time_s' and 'eID'
@@ -354,7 +366,9 @@ def events_point_to_interval(events_df):
     
     for i in range(1, len(events_df)):
         row = events_df.iloc[i]
-        if row['eID'] == current_eid:
+        time_gap = row['time_s'] - end_time
+        is_contiguous = max_gap_s is None or time_gap <= max_gap_s
+        if row['eID'] == current_eid and is_contiguous:
             # Same event, extend interval
             end_time = row['time_s']
         else:
