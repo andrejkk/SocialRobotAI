@@ -5,15 +5,15 @@ import joblib
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from svm_utils import run_inference
+from svm_utils import get_signal_columns, predict_points, run_inference
 
 #%% ===================================================
 # 1 — Load data and model
 # ===================================================
 
 parser = argparse.ArgumentParser(description='SVM baseline inference on test data')
-parser.add_argument('signals_file', help='Path to signals xlsx file')
-parser.add_argument('--events_file', default=None, help='Path to events xlsx file (optional, for comparison)')
+parser.add_argument('signals_file', help='Path to signals CSV file')
+parser.add_argument('--events_file', default=None, help='Path to events CSV file (optional, for comparison)')
 parser.add_argument('--model', default='model.pkl', help='Path to trained model')
 parser.add_argument('--confidence_threshold', type=float, default=0.7, help='Confidence threshold for predictions')
 parser.add_argument('--output_dir', default='.', help='Directory to save results')
@@ -30,11 +30,11 @@ with open("config.json", "r") as f:
 
 # Load data
 print(f"Loading signals from {args.signals_file}...")
-sigs_df = pd.read_excel(args.signals_file)
+sigs_df = pd.read_csv(args.signals_file)
 
 if args.events_file:
     print(f"Loading events from {args.events_file}...")
-    events_df = pd.read_excel(args.events_file)
+    events_df = pd.read_csv(args.events_file)
 else:
     events_df = None
 
@@ -50,6 +50,10 @@ sig_cols = [c for c in sigs_df.columns if c.startswith("sig_")]
 # ===================================================
 
 print(f"Running inference on test data with confidence threshold {args.confidence_threshold}...")
+point_predictions = predict_points(
+    sigs_df, clf, config, sig_cols,
+    confidence_threshold=args.confidence_threshold
+)
 detected_intervals = run_inference(
     sigs_df, clf, config, sig_cols,
     confidence_threshold=args.confidence_threshold
@@ -63,13 +67,16 @@ print(f"Detected {len(detected_intervals)} intervals after merging")
 output_path = Path(args.output_dir)
 output_path.mkdir(exist_ok=True, parents=True)
 
+point_predictions.to_csv(output_path / "raw_predictions.csv", index=False)
+print(f"Saved raw point predictions to {output_path / 'raw_predictions.csv'}")
+
 # Save detected events as intervals
 pd.DataFrame({
     "time_start": [interval[0] for interval in detected_intervals],
     "time_end": [interval[1] for interval in detected_intervals],
     "eID": [interval[2] for interval in detected_intervals]
-}).to_excel(output_path / "detected_events.xlsx", index=False)
-print(f"Saved detected events to {output_path / 'detected_events.xlsx'}")
+}).to_csv(output_path / "detected_events.csv", index=False)
+print(f"Saved detected events to {output_path / 'detected_events.csv'}")
 
 print("\nInference complete!")
 if events_df is not None:

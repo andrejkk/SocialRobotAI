@@ -12,6 +12,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 
+def get_signal_columns(df):
+    """Return signal columns while excluding the time column."""
+    return [column for column in df.columns if column != "time_s"]
+
+
 # ---------------------------------------------------------------------------
 # Window helpers
 # ---------------------------------------------------------------------------
@@ -181,6 +186,32 @@ def merge_close_intervals(intervals, gap_threshold=2.0, min_duration=0.3):
 # Full inference pipeline
 # ---------------------------------------------------------------------------
 
+def predict_points(sigs_df, clf, config, sig_cols, confidence_threshold=0.7):
+    """Return point-level predictions and probabilities before merging."""
+    rows = []
+    t = sigs_df.time_s.min()
+    classes = list(clf.classes_)
+
+    while t <= sigs_df.time_s.max():
+        feat_vec = features_at_time(sigs_df, t, config, sig_cols)
+        probabilities = clf.predict_proba([feat_vec])[0]
+        prediction = clf.predict([feat_vec])[0]
+        max_probability = float(np.max(probabilities))
+
+        row = {
+            "time_s": t,
+            "prediction": prediction,
+            "max_probability": max_probability,
+            "accepted": prediction != "no_event" and max_probability > confidence_threshold,
+        }
+        row.update({f"probability_{label}": float(probability)
+                    for label, probability in zip(classes, probabilities)})
+        rows.append(row)
+        t += config["time_step"]
+
+    return pd.DataFrame(rows)
+
+
 def run_inference(sigs_df, clf, config, sig_cols, confidence_threshold=0.7):
     """
     Slide over sigs_df at config["time_step"] intervals, predict the class
@@ -189,17 +220,13 @@ def run_inference(sigs_df, clf, config, sig_cols, confidence_threshold=0.7):
     Returns:
         list of (time_start, time_end, eID) tuples (after merging)
     """
-    detected_points = []
-    t = sigs_df.time_s.min()
-
-    while t <= sigs_df.time_s.max():
-        feat_vec = features_at_time(sigs_df, t, config, sig_cols)
-        proba = clf.predict_proba([feat_vec])
-        max_prob = np.max(proba)
-        pred = clf.predict([feat_vec])[0]
-        if pred != "no_event" and max_prob > confidence_threshold:
-            detected_points.append((t, pred))
-        t += config["time_step"]
+    point_predictions = predict_points(
+        sigs_df, clf, config, sig_cols, confidence_threshold
+    )
+    detected_points = list(
+        point_predictions.loc[point_predictions["accepted"], ["time_s", "prediction"]]
+        .itertuples(index=False, name=None)
+    )
 
     # Convert consecutive same-eID points to raw intervals
     raw_intervals = []
@@ -207,7 +234,8 @@ def run_inference(sigs_df, clf, config, sig_cols, confidence_threshold=0.7):
         cur_start, cur_eid = detected_points[0]
         cur_end = detected_points[0][0]
         for t, eid in detected_points[1:]:
-            if eid == cur_eid:
+            point_gap = t - cur_end
+            if eid == cur_eid and point_gap <= config["time_step"] * 1.5:
                 cur_end = t
             else:
                 raw_intervals.append((cur_start, cur_end, cur_eid))
