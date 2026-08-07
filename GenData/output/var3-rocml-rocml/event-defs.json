@@ -1,7 +1,7 @@
 {
     "eID_1": {
         "criteria": "mean",
-        "sigs": ["synt_sig_20"],
-        "params": { "thresh": 250.0, "mode": "gt" }
+        "sigs": ["synt_sig_64"],
+        "params": { "thresh": 150.0, "mode": "gt" }
     }
 }
