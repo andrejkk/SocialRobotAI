@@ -109,9 +109,13 @@ def main():
         raise ValueError(f"Missing time column '{args.time_col}'")
     if args.source_signal not in signals.columns:
         raise ValueError(f"Missing source signal '{args.source_signal}'")
-    required_event_columns = {"time_start", "time_end"}
+    required_event_columns = {"time_start", "time_end", "eID"}
     if not required_event_columns.issubset(events.columns):
-        raise ValueError("Events file must contain time_start and time_end columns")
+        raise ValueError("Events file must contain time_start, time_end, and eID columns")
+    event_id = str(args.event_id)
+    events = events[events["eID"].astype(str) == event_id]
+    if events.empty:
+        raise ValueError(f"No events found with eID '{args.event_id}'")
     if args.window_s <= 0:
         raise ValueError("window_s must be greater than zero")
 

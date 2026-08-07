@@ -24,11 +24,13 @@ Note: Op in table below means Opportunity dataset
   \hline
    Var. & Testna množica & Model razpoznave & P & R & F1  \\
    \hline
-   1. & Op & RocML & 1 & 1 & 1 \\ DONE
-   2. & Op & SVN & 1 & 1 & 1 \\ 
-   3. & RocML & RocML & 1 & 1 & 1 \\ DONE 
-   4. & RocML & SVN & 0.25 & 0.51 & 0.34 \\ DONE 
-   5. & SVN(Op) & SVN & 1 & 1 & 1 \\
+   1a (DONE). & Op & RocML & 0.04 & 0.19 & 0.06 \\ syntetic signal and original events and generated event-defs
+   1b (DONE). & Op & RocML & 0.02 & 0.02 & 0.02 \\ on original sigs and events with predefined rules
+   2a (DONE). & Op & SVN & 0.14 & 0.22 & 0.17 \\ syntetic signals, original events, train, infer, eval (conf. 0.6)
+   2b (DONE). & Op & SVN & 0.18 & 0.29 & 0.22 \\  original data, train, infer
+   3 (DONE). & RocML & RocML & 1 & 1 & 1 \\ synthetic signal and events, rule-based recognition
+   4 (DONE). & RocML & SVN & 0.25 & 0.51 & 0.34 \\ synthetic signal and events, svn recognition
+   5. & SVN(Op) & SVN & N/A & N/A & N/A \\
    \hline
   \end{tabular}  
   \caption{Ocena vrednosti naključno generiranih signalov: fiziološki signal je EDA iz podatkovne množice Opportunity, model generiranja časovnih signalov je ARIMA, modela za generiranje dogodkov na množici slučajnih signalov sta RocML in SVN, modela za oceno vrednosti podatkov sta RocML in SVN. Ker je uspešnost razpoznave varianta 2 (SVN na originalni testni množici Op) in na generiranih množicah (SVN na variantah 4. in 5.) primerljiva in uporabno visoka, sklepamo, da je predlagani model geneiranja podatkov ustrezen / neprimerljiva in-ali prenizka, sklepamo, da predlagani model geneiranja podatkov ni ustrezen.}\label{Tab_X}
