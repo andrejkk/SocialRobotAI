@@ -1,0 +1,12 @@
+{
+  "eID_1": {
+    "criteria": "mean",
+    "sigs": [
+      "synt_sig_64"
+    ],
+    "params": {
+      "thresh": -897.1842105263158,
+      "mode": "gt"
+    }
+  }
+}

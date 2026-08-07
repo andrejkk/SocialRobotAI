@@ -16,6 +16,7 @@ Nalogi generiranja podatkov sta ločeni nalogi. Generiranje samih signalov temel
 V tem delu smo v tem okviru uporabili dva modela dogodkov. Prvi model dogodkov je ročni izbor značilk signala in pragov, ki ga imenujemo RocML. Drugi model je model SVN (glejte podpoglavje \ref{}), ki ga naučimo na izbranih signalih. Tako za oceno vrednosti generiranih podatkov ovrednotimo kombinacije v tabeli \ref{Tab_X}. 
 
 
+Note: Op in table below means Opportunity dataset
 
 \begin{table}
 \begin{center}
@@ -23,8 +24,8 @@ V tem delu smo v tem okviru uporabili dva modela dogodkov. Prvi model dogodkov j
   \hline
    Var. & Testna množica & Model razpoznave & P & R & F1  \\
    \hline
-   1. & Op & RocML & 1 & 1 & 1 \\
-   2. & Op & SVN & 1 & 1 & 1 \\
+   1. & Op & RocML & 1 & 1 & 1 \\ DONE
+   2. & Op & SVN & 1 & 1 & 1 \\ 
    3. & RocML & RocML & 1 & 1 & 1 \\ DONE 
    4. & RocML & SVN & 0.25 & 0.51 & 0.34 \\ DONE 
    5. & SVN(Op) & SVN & 1 & 1 & 1 \\

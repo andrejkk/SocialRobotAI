@@ -126,7 +126,6 @@ def main():
 
     points_out = output_dir / args.points_out
     intervals_out = output_dir / args.intervals_out
-    events_points.to_csv(points_out, index=False)
     events_intervals.to_csv(intervals_out, index=False)
 
     print("Event generation completed")
