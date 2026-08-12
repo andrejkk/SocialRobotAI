@@ -75,8 +75,8 @@ pd.DataFrame({
     "time_start": [interval[0] for interval in detected_intervals],
     "time_end": [interval[1] for interval in detected_intervals],
     "eID": [interval[2] for interval in detected_intervals]
-}).to_csv(output_path / "detected_events.csv", index=False)
-print(f"Saved detected events to {output_path / 'detected_events.csv'}")
+}).to_csv(output_path / "detected-events.csv", index=False)
+print(f"Saved detected events to {output_path / 'detected-events.csv'}")
 
 print("\nInference complete!")
 if events_df is not None:
