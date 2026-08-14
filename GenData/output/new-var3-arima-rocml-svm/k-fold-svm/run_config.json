@@ -1,0 +1,6 @@
+{
+  "baseline": "svm",
+  "n_splits": 10,
+  "confidence_threshold": 0.4,
+  "sig_buffer_s": 5.0
+}

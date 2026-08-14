@@ -16,7 +16,11 @@ from svm_utils import (features_at_time, features_over_interval,
 parser = argparse.ArgumentParser(description='SVM baseline for event detection')
 parser.add_argument('signals_file', help='Path to signals CSV file')
 parser.add_argument('events_file', help='Path to events CSV file')
+parser.add_argument('--output_dir', default='.', help='Directory to save model and training artifacts')
 args = parser.parse_args()
+
+output_path = Path(args.output_dir)
+output_path.mkdir(exist_ok=True, parents=True)
 
 sigs_df = pd.read_csv(args.signals_file)
 events_df = pd.read_csv(args.events_file)
@@ -45,7 +49,11 @@ with open("config.json", "r") as f:
 
 X, y, times = build_dataset(sigs_df, events_df, config, sig_cols)
 
-pd.DataFrame(X).to_csv("train_features.csv", index=False)
+# Keep temporal order so calibration folds only see earlier samples during fitting.
+order = np.argsort(times)
+X, y, times = X[order], y[order], times[order]
+
+pd.DataFrame(X).to_csv(output_path / "train_features.csv", index=False)
 
 #%% ===================================================
 # 5 — Classifier
@@ -60,11 +68,12 @@ clf = create_model()
 clf.fit(X, y)
 
 # Save the model
-joblib.dump(clf, 'model.pkl')
-print(f"Model saved to model.pkl")
+model_path = output_path / 'model.pkl'
+joblib.dump(clf, model_path)
+print(f"Model saved to {model_path}")
 
 # Save class mapping for reference
-np.save("classes.npy", clf.named_steps['svm'].classes_)
+np.save(output_path / "classes.npy", clf.classes_)
 
 detected_intervals = run_inference(sigs_df, clf, config, sig_cols)
 
@@ -102,14 +111,14 @@ pd.DataFrame({
     "time_start": events_df.time_start,
     "time_end": events_df.time_end,
     "eID": events_df.eID
-}).to_csv("true_events.csv", index=False)
+}).to_csv(output_path / "true_events.csv", index=False)
 
 # Save detected events as intervals (same format as true_events.csv)
 pd.DataFrame({
     "time_start": [interval[0] for interval in detected_intervals],
     "time_end": [interval[1] for interval in detected_intervals],
     "eID": [interval[2] for interval in detected_intervals]
-}).to_csv("detected_events.csv", index=False)
+}).to_csv(output_path / "detected_events.csv", index=False)
 
 # plt.figure()
 # plt.plot(*roc_curve(y!="no_event", 1-clf.predict_proba(X)[:,list(clf.classes_).index("no_event")])[:2])

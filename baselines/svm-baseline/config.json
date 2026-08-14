@@ -2,6 +2,9 @@
   "features": [
     { "fun": "mean", "lag": 2.0 },
     { "fun": "std", "lag": 2.0 },
+    { "fun": "delta", "lag": 2.0 },
+    { "fun": "slope", "lag": 2.0 },
+    { "fun": "iqr", "lag": 2.0 },
     { "fun": "peaks", "lag": 2.0 },
     { "fun": "fft_band", "lag": 3.0, "fmin": 0.1, "fmax": 2.0 }
   ],

@@ -18,6 +18,7 @@ V tem delu smo v tem okviru uporabili dva modela dogodkov. Prvi model dogodkov j
 
 Note: Op in table below means Opportunity dataset
 
+Old table:
 \begin{table}
 \begin{center}
   \begin{tabular}{|c|c|c|c|c|c|c|}
@@ -35,3 +36,15 @@ Note: Op in table below means Opportunity dataset
   \caption{Ocena vrednosti naključno generiranih signalov: fiziološki signal je EDA iz podatkovne množice Opportunity, model generiranja časovnih signalov je ARIMA, modela za generiranje dogodkov na množici slučajnih signalov sta RocML in SVN, modela za oceno vrednosti podatkov sta RocML in SVN. Ker je uspešnost razpoznave varianta 2 (SVN na originalni testni množici Op) in na generiranih množicah (SVN na variantah 4. in 5.) primerljiva in uporabno visoka, sklepamo, da je predlagani model geneiranja podatkov ustrezen / neprimerljiva in-ali prenizka, sklepamo, da predlagani model geneiranja podatkov ni ustrezen.}\label{Tab_X}
 \end{center}
 \end{table}
+
+New table:
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+  \hline
+   Var. & \shortstack{Testna množica\\časovni signal} & \shortstack{Testna množica\\dogodki} & \shortstack{Model\\razpoznave} & P & R & F1 & AUC \\
+   \hline
+   1. & Op & Op & RocML & 0,18 & 0,35 & 0,24 & N/A\\ DONE 
+   2. & Op & Op & SVN &  0,35 & 0,72 & 0,47 & N/A\\ DONE
+   3. & ARIMA(Op) & RocML & SVN  & 0,83 & 0,41 & 0,55 & N/A \\
+   4. & ARIMA(Op) & SVN(Op) & RocML &  0,71 & 0,565 & 0,63 & N/A\\ DONE
+   \hline
+\end{tabular}  

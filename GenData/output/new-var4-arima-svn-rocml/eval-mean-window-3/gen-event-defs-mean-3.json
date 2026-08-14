@@ -1,0 +1,12 @@
+{
+  "412": {
+    "criteria": "mean",
+    "sigs": [
+      "sig_64"
+    ],
+    "params": {
+      "thresh": -829.168059974754,
+      "mode": "gt"
+    }
+  }
+}

@@ -10,6 +10,8 @@ from scipy.fft import rfft, rfftfreq
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import StratifiedKFold
 
 
 def get_signal_columns(df):
@@ -41,6 +43,21 @@ def feat_peaks(x):
     return len(find_peaks(x)[0])
 
 
+def feat_delta(x):
+    return x[-1] - x[0] if len(x) >= 2 else 0.0
+
+
+def feat_slope(x, fs):
+    if len(x) < 2:
+        return 0.0
+    time = np.arange(len(x)) / fs
+    return np.polyfit(time, x, 1)[0]
+
+
+def feat_iqr(x):
+    return np.percentile(x, 75) - np.percentile(x, 25) if len(x) else 0.0
+
+
 def feat_fft_band(x, fs, fmin, fmax):
     if len(x) < 2:
         return 0
@@ -55,6 +72,9 @@ def compute_feature(x, feat, fs):
     if f == "mean":   return feat_mean(x)
     if f == "std":    return feat_std(x)
     if f == "peaks":  return feat_peaks(x)
+    if f == "delta":  return feat_delta(x)
+    if f == "slope":  return feat_slope(x, fs)
+    if f == "iqr":    return feat_iqr(x)
     if f == "fft_band": return feat_fft_band(x, fs, feat["fmin"], feat["fmax"])
     raise ValueError(f"Unknown feature: {f}")
 
@@ -97,12 +117,12 @@ def build_dataset(sigs, events, config, sig_cols):
     """
     Build (X, y, times) arrays from signal and event DataFrames.
 
-    Event intervals are sampled at 0.1 s; no-event samples are taken at
-    config["time_step"] intervals, avoiding event windows by
+    Events and no-events are sampled at config["time_step"] intervals,
+    avoiding event windows by
     config["event_tolerance"] seconds on either side.
     """
     X, y, times = [], [], []
-    event_sampling_step = 0.1
+    event_sampling_step = config["time_step"]
 
     for _, row in events.iterrows():
         interval_times = np.arange(
@@ -141,21 +161,30 @@ def build_dataset(sigs, events, config, sig_cols):
 # Model factory
 # ---------------------------------------------------------------------------
 
-def create_model():
-    """Return a fresh, untrained SVM pipeline."""
-    return Pipeline([
+def create_model(calibration_splits=5):
+    """Return an SVM with class-safe probability calibration."""
+    base_model = Pipeline([
         ("scaler", StandardScaler()),
-        ("svm",    SVC(probability=True, class_weight="balanced")),
+        ("svm",    SVC(probability=False, class_weight="balanced")),
     ])
+    return CalibratedClassifierCV(
+        estimator=base_model,
+        method="sigmoid",
+        cv=StratifiedKFold(
+            n_splits=calibration_splits,
+            shuffle=True,
+            random_state=42,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
 # Post-processing: merge consecutive detections into intervals
 # ---------------------------------------------------------------------------
 
-def merge_close_intervals(intervals, gap_threshold=2.0, min_duration=0.3):
+def merge_close_intervals(intervals, gap_threshold=0.0, min_duration=0.3):
     """
-    Merge consecutive intervals of the same eID if the gap is below
+    Merge consecutive intervals of the same eID if the gap is at most
     gap_threshold, and drop intervals shorter than min_duration.
 
     Args:
@@ -175,7 +204,7 @@ def merge_close_intervals(intervals, gap_threshold=2.0, min_duration=0.3):
     merged = [list(intervals[0])]
     for start, end, eid in intervals[1:]:
         last_start, last_end, last_eid = merged[-1]
-        if eid == last_eid and (start - last_end) < gap_threshold:
+        if eid == last_eid and (start - last_end) <= gap_threshold:
             merged[-1][1] = end
         else:
             merged.append([start, end, eid])
@@ -212,7 +241,8 @@ def predict_points(sigs_df, clf, config, sig_cols, confidence_threshold=0.7):
     return pd.DataFrame(rows)
 
 
-def run_inference(sigs_df, clf, config, sig_cols, confidence_threshold=0.7):
+def run_inference(sigs_df, clf, config, sig_cols, confidence_threshold=0.7,
+                  merge_gap=None, min_duration=0.3):
     """
     Slide over sigs_df at config["time_step"] intervals, predict the class
     at each step, and return detected event intervals.
@@ -228,18 +258,22 @@ def run_inference(sigs_df, clf, config, sig_cols, confidence_threshold=0.7):
         .itertuples(index=False, name=None)
     )
 
-    # Convert consecutive same-eID points to raw intervals
+    time_step = config["time_step"]
+    if merge_gap is None:
+        merge_gap = time_step * 0.05
+
+    # Each accepted prediction represents its full inference time step.
     raw_intervals = []
     if detected_points:
         cur_start, cur_eid = detected_points[0]
-        cur_end = detected_points[0][0]
+        cur_end = cur_start + time_step
         for t, eid in detected_points[1:]:
             point_gap = t - cur_end
-            if eid == cur_eid and point_gap <= config["time_step"] * 1.5:
-                cur_end = t
+            if eid == cur_eid and point_gap <= merge_gap:
+                cur_end = t + time_step
             else:
                 raw_intervals.append((cur_start, cur_end, cur_eid))
-                cur_start, cur_eid, cur_end = t, eid, t
+                cur_start, cur_eid, cur_end = t, eid, t + time_step
         raw_intervals.append((cur_start, cur_end, cur_eid))
 
-    return merge_close_intervals(raw_intervals)
+    return merge_close_intervals(raw_intervals, merge_gap, min_duration)

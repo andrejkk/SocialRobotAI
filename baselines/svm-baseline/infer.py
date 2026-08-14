@@ -16,6 +16,8 @@ parser.add_argument('signals_file', help='Path to signals CSV file')
 parser.add_argument('--events_file', default=None, help='Path to events CSV file (optional, for comparison)')
 parser.add_argument('--model', default='model.pkl', help='Path to trained model')
 parser.add_argument('--confidence_threshold', type=float, default=0.7, help='Confidence threshold for predictions')
+parser.add_argument('--merge_gap', type=float, default=None, help='Maximum gap in seconds when merging same-class detections (default: adjacent time steps only)')
+parser.add_argument('--min_duration', type=float, default=0.3, help='Minimum detected interval duration in seconds')
 parser.add_argument('--output_dir', default='.', help='Directory to save results')
 args = parser.parse_args()
 
@@ -56,7 +58,9 @@ point_predictions = predict_points(
 )
 detected_intervals = run_inference(
     sigs_df, clf, config, sig_cols,
-    confidence_threshold=args.confidence_threshold
+    confidence_threshold=args.confidence_threshold,
+    merge_gap=args.merge_gap,
+    min_duration=args.min_duration
 )
 print(f"Detected {len(detected_intervals)} intervals after merging")
 

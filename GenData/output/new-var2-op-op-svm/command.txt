@@ -1,0 +1,1 @@
+ROOT="$(git rev-parse --show-toplevel)"; cd "$ROOT/evaluation" && python3 k-fold-cross-evaluation.py "$ROOT/GenData/output/new-var2-op-op-svm/train-sigs.csv" "$ROOT/GenData/output/new-var2-op-op-svm/train-events.csv" "$ROOT/GenData/output/new-var2-op-op-svm/k-fold-svm" 10 --baseline svm --confidence-threshold 0.6
