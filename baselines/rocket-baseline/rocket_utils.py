@@ -327,6 +327,52 @@ def merge_close_intervals(intervals, gap_threshold=2.0, min_duration=0.3):
 # Full inference pipeline
 # ---------------------------------------------------------------------------
 
+def predict_points(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
+    """Return point-level MiniRocket predictions and per-class probabilities."""
+    rocket, clf = model
+    window_size = config["window_size"]
+
+    timestamps = np.arange(
+        sigs_df.time_s.min() + window_size,
+        sigs_df.time_s.max() + 1e-9,
+        config["time_step"]
+    )
+
+    windows, valid_times = [], []
+    for time_s in timestamps:
+        window = extract_window(sigs_df, time_s, window_size, sig_cols)
+        if window is not None:
+            windows.append(window)
+            valid_times.append(time_s)
+
+    if not windows:
+        return pd.DataFrame(columns=['time_s', 'prediction', 'max_probability', 'accepted'])
+
+    max_len = max(window.shape[1] for window in windows)
+    n_channels = len(sig_cols)
+    X_batch = np.zeros((len(windows), n_channels, max_len))
+    for index, window in enumerate(windows):
+        X_batch[index, :, :window.shape[1]] = window
+
+    X_feat = rocket.transform(X_batch)
+    probabilities = clf.predict_proba(X_feat)
+    max_probs = np.max(probabilities, axis=1)
+    predictions = clf.classes_[np.argmax(probabilities, axis=1)]
+
+    point_predictions = pd.DataFrame({
+        'time_s': valid_times,
+        'prediction': predictions,
+        'max_probability': max_probs,
+    })
+    point_predictions['accepted'] = (
+        (point_predictions['prediction'] != 'no_event') &
+        (point_predictions['max_probability'] > confidence_threshold)
+    )
+    for class_index, label in enumerate(clf.classes_):
+        point_predictions[f'probability_{label}'] = probabilities[:, class_index]
+    return point_predictions
+
+
 def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
     """
     Collect all sliding windows into a single batch, run MiniRocket transform
@@ -343,47 +389,14 @@ def run_inference(sigs_df, model, config, sig_cols, confidence_threshold=0.7):
     Returns:
         list of (time_start, time_end, eID) tuples (after merging)
     """
-    rocket, clf = model
-    window_size = config["window_size"]
-
-    # --- 1. Collect all windows into a batch ---
-    # Time stamps: [1431.519 1432.019 1432.519 1433.019 1433.519...]
-    timestamps = np.arange(
-        sigs_df.time_s.min() + window_size,
-        sigs_df.time_s.max() + 1e-9,
-        config["time_step"]
+    point_predictions = predict_points(
+        sigs_df, model, config, sig_cols, confidence_threshold
     )
-
-    # For each timestamp t, extracts a window of signals
-    windows, valid_times = [], []
-    for t in timestamps:
-        w = extract_window(sigs_df, t, window_size, sig_cols)
-        if w is not None:
-            windows.append(w)
-            valid_times.append(t)
-
-    if not windows:
-        return []
-
-    # Pad to uniform length and stack into (N, n_channels, max_len)
-    max_len = max(w.shape[1] for w in windows)
-    n_channels = len(sig_cols)
-    X_batch = np.zeros((len(windows), n_channels, max_len))
-    for i, w in enumerate(windows):
-        X_batch[i, :, :w.shape[1]] = w
-
-    # --- 2. Single batched transform + classify ---
-    X_feat = rocket.transform(X_batch)                          # (N, num_kernels)
-    probabilities = clf.predict_proba(X_feat)                   # (N, n_classes)
-    max_probs = np.max(probabilities, axis=1)                   # (N,)
-    preds = clf.classes_[np.argmax(probabilities, axis=1)]      # (N,)
-
-    # --- 3. Filter confident non-background predictions ---
-    detected_points = [
-        (t, pred)
-        for t, pred, prob in zip(valid_times, preds, max_probs)
-        if pred != "no_event" and prob > confidence_threshold
-    ]
+    detected_points = list(
+        point_predictions.loc[
+            point_predictions['accepted'], ['time_s', 'prediction']
+        ].itertuples(index=False, name=None)
+    )
 
     # --- 4. Convert consecutive same-eID points to raw intervals ---
     raw_intervals = []

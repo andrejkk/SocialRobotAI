@@ -15,6 +15,8 @@ Nalogi generiranja podatkov sta ločeni nalogi. Generiranje samih signalov temel
 
 V tem delu smo v tem okviru uporabili dva modela dogodkov. Prvi model dogodkov je ročni izbor značilk signala in pragov, ki ga imenujemo RocML. Drugi model je model SVN (glejte podpoglavje \ref{}), ki ga naučimo na izbranih signalih. Tako za oceno vrednosti generiranih podatkov ovrednotimo kombinacije v tabeli \ref{Tab_X}. 
 
+Poleg mer P, R in F1 uporabimo tudi mero ROC-AUC. Za vsak prag zaupanja klasifikatorja ustvarimo intervale napovedanih dogodkov in pri tem uporabimo enak izračun časovnega prekrivanja TP, FP in FN kot pri merah P, R in F1. Za posamezni prag izračunamo $TPR = TP/(TP+FN)$ in $FPR = FP/N$, kjer je $N$ skupno trajanje negativnega razreda v opazovanem časovnem intervalu. ROC-AUC je ploščina pod tako dobljeno ROC krivuljo, izračunana s trapeznim pravilom. Mera je časovno utežena: TP, FP in FN predstavljajo trajanja intervalov v sekundah. Izračun se izvede med k-kratnim prečnim vrednotenjem, kjer so verjetnosti klasifikatorja SVN dostopne za vse prage. Za RocML ROC-AUC ni definiran (N/A), ker pravila ustvarijo le binarno odločitev brez primerljive vrednosti zaupanja.
+
 
 Note: Op in table below means Opportunity dataset
 
@@ -40,11 +42,11 @@ Old table:
 New table:
 \begin{tabular}{|c|c|c|c|c|c|c|c|}
   \hline
-   Var. & \shortstack{Testna množica\\časovni signal} & \shortstack{Testna množica\\dogodki} & \shortstack{Model\\razpoznave} & P & R & F1 & AUC \\
+  Var. & \shortstack{Testna množica\\časovni signal} & \shortstack{Testna množica\\dogodki} & \shortstack{Model\\razpoznave} & P & R & F1 & ROC-AUC \\
    \hline
-   1. & Op & Op & RocML & 0,18 & 0,35 & 0,24 & N/A\\ DONE 
-   2. & Op & Op & SVN &  0,35 & 0,72 & 0,47 & N/A\\ DONE
-   3. & ARIMA(Op) & RocML & SVN  & 0,83 & 0,41 & 0,55 & N/A \\
+   1. & Op & Op & RocML & 0,18 & 0,35 & 0,24 & N/A \\ DONE 
+   2. & Op & Op & SVN &  0,35 & 0,72 & 0,47 & 0,66 \\ DONE
+   3. & ARIMA(Op) & RocML & SVN  & 0,83 & 0,41 & 0,55 & 0,90\\
    4. & ARIMA(Op) & SVN(Op) & RocML &  0,71 & 0,565 & 0,63 & N/A\\ DONE
    \hline
 \end{tabular}  

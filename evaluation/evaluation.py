@@ -470,6 +470,7 @@ if __name__ == "__main__":
     print(f"Precision: {result['macro_precision']:.4f} (TP / (TP + FP))")
     print(f"Recall:    {result['macro_recall']:.4f} (TP / (TP + FN))")
     print(f"F1-Score:  {result['macro_f1']:.4f}\n")
+    print("ROC-AUC:   N/A (requires classifier probabilities across thresholds)\n")
     
     print("=" * 60)
     print("MICRO-Averaged Metrics (equal weight to each event type):")
@@ -552,6 +553,7 @@ if __name__ == "__main__":
         'macro_precision':        result['macro_precision'],
         'macro_recall':           result['macro_recall'],
         'macro_f1':               result['macro_f1'],
+        'roc_auc':                'N/A',
         'micro_precision':        result['micro_precision'],
         'micro_recall':           result['micro_recall'],
         'micro_f1':               result['micro_f1'],

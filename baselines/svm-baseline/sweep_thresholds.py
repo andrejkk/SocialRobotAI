@@ -64,7 +64,6 @@ for threshold in args.thresholds:
         min_duration=args.min_duration,
     )
 
-    point_predictions.to_csv(threshold_dir / "raw_predictions.csv", index=False)
     pd.DataFrame(
         detected_intervals, columns=["time_start", "time_end", "eID"]
     ).to_csv(threshold_dir / "detected-events.csv", index=False)

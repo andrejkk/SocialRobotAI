@@ -10,7 +10,12 @@ from sklearn.model_selection import StratifiedKFold
 # Resolve paths to shared utilities
 # -------------------------------------------------------------------
 _HERE = Path(__file__).parent
-from eval_utils  import evaluate_events, plot_signals_with_events, compute_timing_differences
+from eval_utils import (
+    compute_temporal_roc_auc,
+    compute_timing_differences,
+    evaluate_events,
+    plot_signals_with_events,
+)
 
 
 def _read_table(path):
@@ -22,17 +27,17 @@ def _read_table(path):
 
 
 def _load_baseline(baseline_name):
-    """Import baseline utilities and return (build_dataset, create_model, run_inference, config_path)."""
+    """Import baseline utilities and return their data, model, and inference helpers."""
     if baseline_name == 'svm':
         sys.path.insert(0, str(_HERE.parent / 'baselines' / 'svm-baseline'))
-        from svm_utils import build_dataset, create_model, run_inference
+        from svm_utils import build_dataset, create_model, predict_points, run_inference
         config_path = _HERE.parent / 'baselines' / 'svm-baseline' / 'config.json'
-        return build_dataset, create_model, run_inference, config_path
+        return build_dataset, create_model, predict_points, run_inference, config_path
     elif baseline_name == 'rocket':
         sys.path.insert(0, str(_HERE.parent / 'baselines' / 'rocket-baseline'))
-        from rocket_utils import build_dataset, create_model, run_inference
+        from rocket_utils import build_dataset, create_model, predict_points, run_inference
         config_path = _HERE.parent / 'baselines' / 'rocket-baseline' / 'config.json'
-        return build_dataset, create_model, run_inference, config_path
+        return build_dataset, create_model, predict_points, run_inference, config_path
     else:
         raise ValueError(f"Unknown baseline: {baseline_name}. Use 'svm' or 'rocket'.")
 
@@ -80,7 +85,7 @@ def run_k_fold_cross_evaluation(
     sig_buffer_s=5.0,
     baseline='svm',
 ):
-    build_dataset, create_model, run_inference, config_path = _load_baseline(baseline)
+    build_dataset, create_model, predict_points, run_inference, config_path = _load_baseline(baseline)
 
     sigs_df   = _read_table(sigs_file).sort_values('time_s').reset_index(drop=True)
     events_df = _read_table(events_file).sort_values('time_start').reset_index(drop=True)
@@ -201,6 +206,10 @@ def run_k_fold_cross_evaluation(
 
         # ---- Infer ----
         print("  Running inference on validation set...")
+        point_scores = predict_points(
+            val_sigs, model, config, sig_cols,
+            confidence_threshold=confidence_threshold,
+        )
         pred_list = run_inference(val_sigs, model, config, sig_cols,
                                   confidence_threshold=confidence_threshold)
         pred_df = pd.DataFrame(pred_list, columns=['time_start', 'time_end', 'eID'])
@@ -208,6 +217,16 @@ def run_k_fold_cross_evaluation(
 
         # ---- Evaluate ----
         result = evaluate_events(val_events, pred_df)
+        roc_auc, _ = compute_temporal_roc_auc(
+            val_events,
+            point_scores,
+            eval_start_time=val_sigs['time_s'].min(),
+            eval_end_time=val_sigs['time_s'].max(),
+            time_step=config['time_step'],
+            merge_gap=(config.get('gap_threshold', config['time_step'] * 0.05)
+                       if baseline == 'rocket' else config['time_step'] * 0.05),
+            min_duration=config.get('min_duration', 0.3),
+        )
 
         # ---- Timing differences ----
         fold_diffs = compute_timing_differences(result['comparisons'])
@@ -245,6 +264,7 @@ def run_k_fold_cross_evaluation(
             'macro_precision':  result['macro_precision'],
             'macro_recall':     result['macro_recall'],
             'macro_f1':         result['macro_f1'],
+            'roc_auc':          roc_auc,
             'micro_precision':  result['micro_precision'],
             'micro_recall':     result['micro_recall'],
             'micro_f1':         result['micro_f1'],
@@ -254,6 +274,8 @@ def run_k_fold_cross_evaluation(
 
         print(f"  Macro  P={result['macro_precision']:.3f}  "
               f"R={result['macro_recall']:.3f}  F1={result['macro_f1']:.3f}")
+        print(f"  ROC-AUC={roc_auc:.3f}" if not np.isnan(roc_auc)
+              else "  ROC-AUC=N/A")
         print(f"  Micro  P={result['micro_precision']:.3f}  "
               f"R={result['micro_recall']:.3f}  F1={result['micro_f1']:.3f}")
 

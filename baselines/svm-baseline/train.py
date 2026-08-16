@@ -53,7 +53,6 @@ X, y, times = build_dataset(sigs_df, events_df, config, sig_cols)
 order = np.argsort(times)
 X, y, times = X[order], y[order], times[order]
 
-pd.DataFrame(X).to_csv(output_path / "train_features.csv", index=False)
 
 #%% ===================================================
 # 5 — Classifier

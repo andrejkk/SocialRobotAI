@@ -69,8 +69,8 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
     if eval_start_time is not None:
         gt_df   = gt_df[gt_df['time_end']     >= eval_start_time].reset_index(drop=True)
         pred_df = pred_df[pred_df['time_end'] >= eval_start_time].reset_index(drop=True)
-        print(f"\nFiltering by eval_start_time={eval_start_time}s: "
-              f"{len(gt_df)} GT, {len(pred_df)} predicted events remain")
+        # print(f"\nFiltering by eval_start_time={eval_start_time}s: "
+              #f"{len(gt_df)} GT, {len(pred_df)} predicted events remain")
 
     total_tp = total_fp = total_fn = 0.0
     comparisons = []
@@ -162,6 +162,139 @@ def evaluate_events(gt_df, pred_df, eval_start_time=None, instantaneous_toleranc
         # backward-compat aliases
         'precision': macro_prec, 'recall': macro_rec, 'f1': macro_f1,
     }
+
+
+# ---------------------------------------------------------------------------
+# ROC-AUC from point-level classifier probabilities
+# ---------------------------------------------------------------------------
+
+def _normalize_eid(value):
+    try:
+        return str(int(float(value)))
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def _merge_score_points(times, eid, time_step, merge_gap, min_duration):
+    """Convert thresholded timestamps for one event class into intervals."""
+    if len(times) == 0:
+        return []
+
+    intervals = []
+    start = end = float(times[0])
+    for time_s in times[1:]:
+        time_s = float(time_s)
+        if time_s - (end + time_step) <= merge_gap:
+            end = time_s
+        else:
+            if end + time_step - start >= min_duration:
+                intervals.append((start, end + time_step, eid))
+            start = end = time_s
+
+    if end + time_step - start >= min_duration:
+        intervals.append((start, end + time_step, eid))
+    return intervals
+
+
+def compute_temporal_roc_auc(
+    gt_df,
+    point_scores_df,
+    eval_start_time,
+    eval_end_time,
+    time_step,
+    merge_gap=0.0,
+    min_duration=0.0,
+    instantaneous_tolerance=0.5,
+):
+    """Calculate duration-weighted, micro-aggregated ROC-AUC.
+
+    ``point_scores_df`` must contain ``time_s`` and one probability column per
+    event class named ``probability_<eID>``. For every distinct probability
+    threshold (plus 0 and 1), the helper builds intervals and delegates
+    temporal TP/FP/FN calculation to ``evaluate_events`` unchanged.
+
+    Returns ``(roc_auc, roc_points)``. ``roc_auc`` is ``np.nan`` when the
+    supplied data cannot form a temporal ROC curve.
+    """
+    required_columns = {'time_s'}
+    if not required_columns.issubset(point_scores_df.columns):
+        return np.nan, pd.DataFrame(columns=['threshold', 'tpr', 'fpr'])
+
+    horizon = float(eval_end_time) - float(eval_start_time)
+    if horizon <= 0:
+        return np.nan, pd.DataFrame(columns=['threshold', 'tpr', 'fpr'])
+
+    scores = point_scores_df.copy()
+    scores = scores[(scores['time_s'] >= eval_start_time) &
+                    (scores['time_s'] <= eval_end_time)].sort_values('time_s')
+    if scores.empty:
+        return np.nan, pd.DataFrame(columns=['threshold', 'tpr', 'fpr'])
+
+    gt = gt_df.copy()
+    gt['eID'] = gt['eID'].map(_normalize_eid)
+    gt = gt[(gt['time_end'] >= eval_start_time) &
+            (gt['time_start'] <= eval_end_time)].reset_index(drop=True)
+
+    probability_columns = {}
+    for column in scores.columns:
+        if column.startswith('probability_'):
+            eid = _normalize_eid(column.removeprefix('probability_'))
+            probability_columns[eid] = column
+
+    supported_eids = [eid for eid in gt['eID'].unique() if eid in probability_columns]
+    if not supported_eids:
+        return np.nan, pd.DataFrame(columns=['threshold', 'tpr', 'fpr'])
+
+    gt = gt[gt['eID'].isin(supported_eids)].reset_index(drop=True)
+    positive_duration = sum(
+        max(0.0, min(float(row.time_end), eval_end_time) -
+            max(float(row.time_start), eval_start_time))
+        for row in gt.itertuples(index=False)
+    )
+    negative_duration = len(supported_eids) * horizon - positive_duration
+    if positive_duration <= 0 or negative_duration <= 0:
+        return np.nan, pd.DataFrame(columns=['threshold', 'tpr', 'fpr'])
+
+    thresholds = {0.0, 1.0}
+    for eid in supported_eids:
+        thresholds.update(scores[probability_columns[eid]].dropna().astype(float))
+
+    roc_rows = []
+    for threshold in sorted(thresholds, reverse=True):
+        intervals = []
+        for eid in supported_eids:
+            probability_column = probability_columns[eid]
+            times = scores.loc[
+                scores[probability_column] >= threshold, 'time_s'
+            ].to_numpy()
+            intervals.extend(_merge_score_points(
+                times, eid, time_step, merge_gap, min_duration
+            ))
+
+        intervals = [
+            (max(start, eval_start_time), min(end, eval_end_time), eid)
+            for start, end, eid in intervals
+            if min(end, eval_end_time) > max(start, eval_start_time)
+        ]
+        pred_df = pd.DataFrame(intervals, columns=['time_start', 'time_end', 'eID'])
+        result = evaluate_events(
+            gt, pred_df,
+            eval_start_time=eval_start_time,
+            instantaneous_tolerance=instantaneous_tolerance,
+        )
+        tp = sum(result['eID_metrics'][eid]['tp'] for eid in supported_eids)
+        fp = sum(result['eID_metrics'][eid]['fp'] for eid in supported_eids)
+        fn = sum(result['eID_metrics'][eid]['fn'] for eid in supported_eids)
+        roc_rows.append({
+            'threshold': threshold,
+            'tpr': tp / (tp + fn) if tp + fn > 0 else 0.0,
+            'fpr': fp / negative_duration,
+        })
+
+    roc_points = pd.DataFrame(roc_rows).sort_values(['fpr', 'tpr']).reset_index(drop=True)
+    roc_points = roc_points.groupby('fpr', as_index=False)['tpr'].max()
+    roc_auc = float(np.trapz(roc_points['tpr'], roc_points['fpr']))
+    return roc_auc, roc_points
 
 
 # ---------------------------------------------------------------------------

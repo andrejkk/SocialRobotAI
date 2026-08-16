@@ -71,8 +71,6 @@ print(f"Detected {len(detected_intervals)} intervals after merging")
 output_path = Path(args.output_dir)
 output_path.mkdir(exist_ok=True, parents=True)
 
-point_predictions.to_csv(output_path / "raw_predictions.csv", index=False)
-print(f"Saved raw point predictions to {output_path / 'raw_predictions.csv'}")
 
 # Save detected events as intervals
 pd.DataFrame({
