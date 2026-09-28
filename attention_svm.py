@@ -2,7 +2,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.svm import SVC
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
 
 import numpy as np
 
@@ -358,7 +358,7 @@ mouth_x_norm = (df['mouth_x'] - eye_mid_x) / iod
 mouth_y_norm = (df['mouth_y'] - eye_mid_y) / iod
 
 
-new_df_iod = pd.DataFrame({
+new_df = pd.DataFrame({
     "left_eye_x": left_eye_x_norm,
     "left_eye_y": left_eye_y_norm,
     "right_eye_x": right_eye_x_norm,
@@ -376,7 +376,8 @@ new_df_iod = pd.DataFrame({
     "label": df["label"]
 }, index=df.index)
 
-print(new_df_iod)
+X = new_df.drop(columns="label")
+y = new_df["label"]
 
 
 #####brez IOD:
@@ -401,25 +402,39 @@ print(new_df_iod)
 #print(new_df)
 #print(new_df_iod)
 
-train_df, test_df = train_test_split(new_df_iod, test_size=0.2, random_state=42, stratify=df['label'])
+#train_df, test_df = train_test_split(new_df_iod, test_size=0.2, random_state=42, stratify=df['label'])
 
 #binarni target column za attentiveness je label
 target_column = 'label'
 
-X_train = train_df.drop(columns=[target_column])
-y_train = train_df[target_column]
+######za brez 10fold#######
+# X_train = train_df.drop(columns=[target_column])
+# y_train = train_df[target_column]
 
-print("\nSVM features:")
-for i, column in enumerate(X_train.columns):
-    print(i, column)
+# print("\nSVM features:")
+# for i, column in enumerate(X_train.columns):
+#     print(i, column)
+######za brez 10fold#######
 
 
-X_test = test_df.drop(columns=[target_column])
-y_test = test_df[target_column]
+# X_test = test_df.drop(columns=[target_column])
+# y_test = test_df[target_column]
 
-print("\nTraining samples:", len(X_train))
-print("Test samples:", len(X_test))
-print("Number of features:", X_train.shape[1])
+# print("\nTraining samples:", len(X_train))
+# print("Test samples:", len(X_test))
+# print("Number of features:", X_train.shape[1])
+
+X_dev, X_test, y_dev, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.20,
+    random_state=42,
+    stratify=y
+)
+
+
+#binarni target column za attentiveness je label
+target_column = 'label'
 
 
 # numeric_features = [
@@ -451,13 +466,51 @@ model = make_pipeline(
         #class_weight="balanced"
     )
 )
+
+###########za 10 krizno validacijo###########
+cv = StratifiedKFold(
+    n_splits=10,
+    shuffle=True,
+    random_state=42
+)
+
+scores = cross_validate(
+    model,
+    X_dev,
+    y_dev,
+    cv=cv,
+    scoring=[
+        "accuracy",
+        "precision",
+        "recall",
+        "f1"
+    ],
+    return_train_score=True #al true?
+)
+
+print(y_dev.value_counts())
+print(y_dev.value_counts(normalize=True))
+
+print("###10FOLD")
+print("Accuracy:", scores["test_accuracy"])
+print("Mean accuracy:", scores["test_accuracy"].mean())
+print("Std accuracy:", scores["test_accuracy"].std())
+
+print("Mean precision:", scores["test_precision"].mean())
+print("Mean recall:", scores["test_recall"].mean())
+print("Mean F1:", scores["test_f1"].mean())
+print("Std F1:", scores["test_f1"].std())
+print("###10FOLD")
+
+
 # --------------------------------------------------
 # TRAIN
 # --------------------------------------------------
 
 print("Training SVM...")
 
-model.fit(X_train, y_train)
+#model.fit(X_train, y_train)
+model.fit(X_dev, y_dev)
 
 print("Training finished, saving model...")
 
