@@ -40,93 +40,11 @@ class ProcessFrames:
         self.bbox_h = None
         self.bbox_w = None
 
-    def estimate_head_pose(face_landmarks, frame):
-        h, w = frame.shape[:2]
 
-        # Six facial landmarks
-        landmark_ids = {
-            "nose": 1,
-            "chin": 152,
-            "left_eye": 33,
-            "right_eye": 263,
-            "left_mouth": 61,
-            "right_mouth": 291
-        }
-
-        image_points = np.array([
-            [
-                face_landmarks[landmark_ids["nose"]].x * w,
-                face_landmarks[landmark_ids["nose"]].y * h
-            ],
-            [
-                face_landmarks[landmark_ids["chin"]].x * w,
-                face_landmarks[landmark_ids["chin"]].y * h
-            ],
-            [
-                face_landmarks[landmark_ids["left_eye"]].x * w,
-                face_landmarks[landmark_ids["left_eye"]].y * h
-            ],
-            [
-                face_landmarks[landmark_ids["right_eye"]].x * w,
-                face_landmarks[landmark_ids["right_eye"]].y * h
-            ],
-            [
-                face_landmarks[landmark_ids["left_mouth"]].x * w,
-                face_landmarks[landmark_ids["left_mouth"]].y * h
-            ],
-            [
-                face_landmarks[landmark_ids["right_mouth"]].x * w,
-                face_landmarks[landmark_ids["right_mouth"]].y * h
-            ]
-        ], dtype=np.float64)
-
-        # Approximate 3-D canonical face
-        model_points = np.array([
-            [0.0,    0.0,    0.0],       # nose
-            [0.0,  -63.6,  -12.5],       # chin
-            [-43.3, 32.7,  -26.0],       # left eye
-            [43.3,  32.7,  -26.0],       # right eye
-            [-28.9, -28.9, -24.1],       # left mouth
-            [28.9,  -28.9, -24.1]        # right mouth
-        ], dtype=np.float64)
-
-        focal_length = w
-
-        camera_matrix = np.array([
-            [focal_length, 0, w / 2],
-            [0, focal_length, h / 2],
-            [0, 0, 1]
-        ], dtype=np.float64)
-
-        distortion = np.zeros((4, 1))
-
-        success, rotation_vector, translation_vector = cv2.solvePnP(
-            model_points,
-            image_points,
-            camera_matrix,
-            distortion,
-            flags=cv2.SOLVEPNP_ITERATIVE
-        )
-
-        if not success:
-            return None, None, None
-
-        rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
-
-        angles, _, _, _, _, _ = cv2.RQDecomp3x3(
-            rotation_matrix
-        )
-
-        rotation_x = angles[0]
-        rotation_y = angles[1]
-        rotation_z = angles[2]
-
-        return rotation_x, rotation_y, rotation_z
-    
     
     def initialize_tracker(self, frame, bbox):
-        tracker = cv2.legacy.TrackerCSRT_create() #al rab cv2.legacy.TrackerMOSSE_create() ??
-        bbox = tuple(map(int, bbox))  # Ensure bbox is in (x, y, w, h) format
+        tracker = cv2.legacy.TrackerCSRT_create() #al cv2.legacy.TrackerMOSSE_create()
+        bbox = tuple(map(int, bbox))  # bbox v (x, y, w h) formatu
         ok = tracker.init(frame, bbox)
         # print("Tracker init:", ok)
         # print("BBox:", bbox)
@@ -180,7 +98,7 @@ class ProcessFrames:
         else:
             print("No boundingbox given from multiprocess of deepface")
 
-    # send frame to deepface multiprocess
+    # poslji frame v deepface multiprocess
     def request_mprocess_detection(self, currentframe, frameId):
         # currentN = (frameId % self.detection_interval == 0) or len(self.trackers) == 0
         if frameId % self.detection_interval != 0: #TODO and not self.request_in_flight?
@@ -195,8 +113,6 @@ class ProcessFrames:
             print("Worker je ševedno busy")
             pass  # worker still busy on a previous frame - skip this request
 
-    #def check_previous_frames(self, currentframe, trackers):
-
     def process_frames(self):
         import cv2
         import mediapipe as mp
@@ -210,29 +126,6 @@ class ProcessFrames:
             min_detection_confidence=0.5, min_tracking_confidence=0.4
         )  # kakšen naj bo optimalen confidence tu?
         
-        # self.mp_face_mesh = mp.solutions.face_mesh
-        # #self.mp_face_mesh = mp.solutions.face_mesh
-        # self.face_mesh = self.mp_face_mesh.FaceMesh(
-        #     static_image_mode=False,
-        #     max_num_faces=1,
-        #     refine_landmarks=False,
-        #     min_detection_confidence=0.5,
-        #     min_tracking_confidence=0.5
-        # )
-
-        # -------------------------------------------------------------------
-        # 1. Initialize MediaPipe Face Mesh
-        # -------------------------------------------------------------------
-        # mp_face_mesh = mp.solutions.face_mesh
-        # face_mesh = mp_face_mesh.FaceMesh(
-        #     static_image_mode=False,
-        #     max_num_faces=1,
-        #     refine_landmarks=True,
-        #     min_detection_confidence=0.5,
-        #     min_tracking_confidence=0.5
-        # )
-        # print("INIT FACE_MASH DONE:",  face_mesh)
-
         frameId = 0
         last_timestamp = 0
         while cap.isOpened():
@@ -262,8 +155,6 @@ class ProcessFrames:
                 if results_pose.pose_landmarks
                 else None
             )
-            #face mesh
-            #results_face = face_mesh.process(rgb_frame)
 
             pitch, yaw, roll = 0, 0, 0
             pose_detected_this_frame = False
@@ -271,7 +162,6 @@ class ProcessFrames:
 
             if pose_landmarks:
                 pose_detected_this_frame = True
-                # a so to vse k lahko uporabim za koordinate obraza iz pose_landmarks?
                 nose = pose_landmarks[0] #nose
                 #tele vse so obrnjene glede na pogleda iz kamere, v nasprotnem primeru obrni:
                 left_eye = pose_landmarks[5] #left eye
@@ -288,11 +178,6 @@ class ProcessFrames:
 
                 #print("LEFT MOUTH COORDS: ", left_mouth.x, left_mouth.y, "RIGHT MOUTH COORDS: ", right_mouth.x, right_mouth.y)
                 ####vsi te zgornji coordinates so normalizirani od mediapipa med 0 pa 1, t
-                
-                #iz njih dobim
-                # nose_face_x = (nose.x - face_x) / face_w
-                # nose_face_y = (nose.y - face_y) / face_h
-
 
                 # pts = np.array(
                 #         [[lm.x, lm.y, lm.z] for lm in face_landmarks.landmark],
@@ -310,9 +195,6 @@ class ProcessFrames:
                 # right_eye_corner = p(263)
                 # left_ear = p(234)
                 # right_ear = p(454)
-
-
-
 
                 #######======= poskus convertat image coords iz pose landmarks za solvepnp da dobim euler angles
                 # h_img, w_img, _ = currentframe.shape ta je brez uses
@@ -333,15 +215,6 @@ class ProcessFrames:
                     [left_mouth.x * w_img, left_mouth.y * h_img],  # 9 left mouth
                     [right_mouth.x * w_img,right_mouth.y * h_img], # 10 right mouth
                 ], dtype=np.float64)
-
-                # #kanonicni 3D model točk za solvePnP, brez uses
-                # model_points = np.array([ 
-                #     [0.0,   0.0,   0.0],    # nose
-                #     [-3.0,  2.0,  -2.0],    # left eye
-                #     [3.0,   2.0,  -2.0],    # right eye
-                #     [-2.5, -3.0,  -1.0],    # left mouth
-                #     [2.5,  -3.0,  -1.0],    # right mouth
-                # ], dtype=np.float64)
 
                 model_points = np.array([
                     [0.0,   0.0,   0.0],     # nose
@@ -374,35 +247,12 @@ class ProcessFrames:
                 #rotation_matrix, _ = cv2.Rodrigues(rvec) #matrika orientacij ki jo je ocenu pnp
                 if success:
                     rotation_matrix, _ = cv2.Rodrigues(rvec)
-
                     euler_angles = cv2.RQDecomp3x3(rotation_matrix)[0]
-
                     pitch = np.radians(euler_angles[0])
                     yaw   = np.radians(euler_angles[1])
                     roll  = np.radians(euler_angles[2])
 
-                #convert rotation matrix to euler angles
-                #euler_angles = cv2.RQDecomp3x3(rotation_matrix)[0] kaj tale nrdi? al je bols tko:
                 #######============================
-
-                # 2. Define 3D canonical face model points corresponding to Pose Landmarks
-                # Landmarks: [0: Nose, 2: Left Eye, 5: Right Eye, 7: Left Ear, 8: Right Ear, 9: Left Mouth, 10: Right Mouth]
-                # model_points_3d = np.array([
-                #     (0.0, 0.0, 0.0),          # 0: Nose tip
-                #     (-225.0, 170.0, -135.0),  # 2: Left eye
-                #     (225.0, 170.0, -135.0),   # 5: Right eye
-                #     (-450.0, 0.0, -350.0),    # 7: Left ear (adds crucial 3D depth)
-                #     (450.0, 0.0, -350.0),     # 8: Right ear (adds crucial 3D depth)
-                #     (-150.0, -150.0, -125.0), # 9: Left mouth corner
-                #     (150.0, -150.0, -125.0)   # 10: Right mouth corner
-                # ], dtype=np.float64)
-
-                # POSE_LANDMARK_IDS = [0, 2, 5, 7, 8, 9, 10]
-
-                #nujno normalizirat:
-                # left_eye_x = left_eye.x * w_img
-                # left_eye_y = left_eye.y * h_img
-
                 #roll na star nacin
                 #roll = np.arctan2(right_eye_y - left_eye_y, right_eye_x - left_eye_x)
                 # left_eye = np.array([left_eye.x, left_eye.y])
@@ -412,46 +262,14 @@ class ProcessFrames:
                 #     right_eye[0] - left_eye[0]
                 # )
 
-
-                #baje rabm ful bol relative koordinate??? tkoda uporab to
-                # left_eye_x_rel = (left_eye_x - face_x) / face_w
-                # left_eye_y_rel = (left_eye_y - face_y) / face_h
-
-                # right_eye_x_rel = (right_eye_x - face_x) / face_w
-                # right_eye_y_rel = (right_eye_y - face_y) / face_h
-
-                # nose_x_rel = (nose_tip_x - face_x) / face_w
-                # nose_y_rel = (nose_tip_y - face_y) / face_h
-
-                # mouth_x_rel = (mouth_x - face_x) / face_w
-                # mouth_y_rel = (mouth_y - face_y) / face_h
-                ########################
-
-                # right_eye_x = right_eye.x * w_img
-                # right_eye_y = right_eye.y * h_img
-
-                # nose_tip_x = nose.x * w_img
-                # nose_tip_y = nose.y * h_img
-
-                # centralna tocka ust
-                # mouth_x = (
-                #     (left_mouth.x + right_mouth.x) / 2
-                # ) * w_img
-
-                # mouth_y = (
-                #     (left_mouth.y + right_mouth.y) / 2
-                # ) * h_img
-                ###################################
-
                 #proposed glede na moje vrednosti kernimam facemesha
                 # roll = np.arctan2(
                 #     right_eye_y - left_eye_y,
                 #     right_eye_x - left_eye_x
                 # )
-                
                 # eye_mid_x = (left_eye.x + right_eye_x) / 2
                 # eye_mid_y = (left_eye_y + right_eye_y) / 2
-
+                
                 #pitch yaw roll, ty random indian
                 # nose_tip = landmarks[1]
                 # chin = landmarks[152]
@@ -461,105 +279,12 @@ class ProcessFrames:
                 # pitch = np.arctan2(chin[1] - nose_tip[1], chin[2] - nose_tip[2])
                 # yaw = np.arctan2(nose_tip[0] - chin[0], nose_tip[2] - chin[2])
             
-            
-            #fts = pd.DataFrame([{"nose": nose, "left_eye": left_eye, "right_eye": right_eye, "left_mouth": left_mouth, "right_mouth": right_mouth}])
-            #print(" ############# MOJI TRENUTNI POSE LANDMARKS OBRAZA: ", fts)
-
-            ###face mesh in results face je je za stran, vse mam v pose landmarks
-            #results_face = self.face_mesh.process(rgb_pose)
-            # if results_face.multi_face_landmarks:
-            #     face_landmarks = results_face.multi_face_landmarks[0].landmark
-
-            #     print(f"Number of face landmarks: {len(face_landmarks)}")
-
-            #     for i, lm in enumerate(face_landmarks):
-            #         print(
-            #             f"Landmark {i}: "
-            #             f"x={lm.x:.6f}, "
-            #             f"y={lm.y:.6f}, "
-            #             f"z={lm.z:.6f}"
-            #         )
-            # else:
-            #     face_landmarks = None
-            #     print("No face landmarks detected.")
-            # results_face = self.face_mesh.process(rgb_pose)
-            # face_landmarks = None
-            # if results_face.multi_face_landmarks:
-            #     face_landmarks = results_face.multi_face_landmarks[0].landmark
-            #     print("!!!!!Face landmarks:", face_landmarks)
-            # else:
-            #     print("No face landmarks detected.")
-
-            #results_face = self.mp_face_mesh.process(rgb_frame)
-            # face_landmarks = None
-            # if results_face.multi_face_landmarks:
-            #     face_landmarks = (
-            #         results_face
-            #         .multi_face_landmarks[0]
-            #         .landmark
-            #     )
-            
-            
-            #print("Pose landmarks:", pose_landmarks)
-            
-            
-            #print("Face landmarks:", results_face)
-            #face_landmarks = results_face.multi_face_landmarks[0].landmark
-
-            # ---------------------------------------------------------
-            # HEAD POSE
-            # ---------------------------------------------------------
-
-            # pitch, yaw, roll = self.estimate_head_pose(
-            #     currentframe,
-            #     face_landmarks
-            # )
-
-            #create svm feature inpuut dataframe from mediapipe pose landmarks and deepface emotion detection
-            # df_input = pd.DataFrame()
-            # df_input["pose_x"] = [lm.x for lm in pose_landmarks] if pose_landmarks else [0]*33
-            # df_input["pose_y"] = [lm.y for lm in pose_landmarks] if pose_landmarks else [0]*33
-            # df_input["pose_z"] = [lm.z for lm in pose_landmarks] if pose_landmarks else [0]*33
-            # df_input["emotion"] = [self.last_label] if hasattr(self, 'last_label') else ["not detected"]
-            # df_input["face_x"] = [self.last_conf] if hasattr(self, 'last_conf') else [0.0]
-
-           
-            # fts = pd.DataFrame([{
-            #     "face_x"
-            # }])
-
-            # try:
-            #     features = pd.DataFrame([{
-            #         "face_x": self.last_conf if hasattr(self, 'last_conf') else 0.0,
-            #         "face_y": 0.0,  # Placeholder
-            #         "face_w": 0.0,  # Placeholder
-            #         "face_h": 0.0,  # Placeholder
-            #         "face_con": self.last_conf if hasattr(self, 'last_conf') else 0.0,
-            #         "pose": pose_landmarks if pose_landmarks else None,
-            #         "pose_x": [lm.x for lm in pose_landmarks] if pose_landmarks else [0]*33,
-            #         "pose_y": [lm.y for lm in pose_landmarks] if pose_landmarks else [0]*33
-            #     }])
-            # except Exception as e:
-            #     print(f"Error occurred while creating features DataFrame: {e}")
-            #     features = pd.DataFrame([{
-            #         "face_x": 0.0,
-            #         "face_y": 0.0,
-            #         "face_w": 0.0,
-            #         "face_h": 0.0,
-            #         "face_con": 0.0,
-            #         "pose": None,
-            #         "pose_x": [0]*33,
-            #         "pose_y": [0]*33
-            #     }])
-
-            
             if self.trackers:
                 #print("Not N-th frame, skipping detection...")
                 ok, bbox = self.trackers[0].update(currentframe)
                 #print(f"Tracker update result: {ok}, bbox: {bbox}")
                 if ok:
                     x, y, w, h = map(int, bbox)
-
                     #izlusci koordinate obraza in mediapipe koordinate za featurje za attentiveness SVM model
                     face_x = x
                     face_y = y
@@ -599,96 +324,6 @@ class ProcessFrames:
                         #print(svm_ft_pd.describe())
                     else:
                         continue
-
-                    # eye_l = np.array([left_eye.x * w_img, left_eye.y * h_img])
-                    # eye_r = np.array([right_eye.x * w_img, right_eye.y * h_img])
-                    # nose_pt  = np.array([nose.x * w_img, nose.y * h_img])
-                    # mouth_pt = np.array([(left_mouth.x + right_mouth.x) / 2 * w_img,
-                    #                     (left_mouth.y + right_mouth.y) / 2 * h_img])
-
-                    # eye_mid = (eye_l + eye_r) / 2
-                    
-                    # right_eye =
-                    # left_eye = 
-                    # iod = np.linalg.norm(eye_r - eye_l)  # inter-pupillary distance, your scale reference
-
-                    # nose_rel_x, nose_rel_y = (nose_pt - eye_mid) / ipd
-                    # mouth_rel_x, mouth_rel_y = (mouth_pt - eye_mid) / ipd
-                    # eye_l_rel_x, eye_l_rel_y = (eye_l - eye_mid) / ipd
-                    # eye_r_rel_x, eye_r_rel_y = (eye_r - eye_mid) / ipd
-
-
-                    # svm_features = {
-                    # z iod, nism napisu tu ampak zgor:
-                    #     "left_eye_x": (left_eye.x - face_x ) / face_w,
-                    #     "left_eye_y": (left_eye.y - face_y ) / face_h,
-                    #     "right_eye_x": (right_eye.x - face_x ) / face_w,
-                    #     "right_eye_y": (right_eye.y - face_y ) / face_h,
-                    #     "nose_tip_x": (nose.x - face_x ) / face_w,
-                    #     "nose_tip_y": (nose.y - face_y ) / face_h,
-                    #     # "mouth_x": (mouth.x - face_x ) / face_w,
-                    #     # "mouth_y": (mouth.y - face_y ) / face_h,
-                    #     #"mouth_center": (left_mouth.x + left_mouth.x) / 2.0
-                    #     "mouth_x": (left_mouth.x + right_mouth.x) / 2.0,
-                    #     "mouth_y": (left_mouth.y + right_mouth.y) / 2.0,
-                    #     "head_pitch": pitch,
-                    #     "head_yaw": yaw,
-                    #     "head_roll": roll,
-                        
-                        #brez iod
-                        # "left_eye_x": (left_eye.x - face_x ) / face_w,
-                        # "left_eye_y": (left_eye.y - face_y ) / face_h,
-                        # "right_eye_x": (right_eye.x - face_x ) / face_w,
-                        # "right_eye_y": (right_eye.y - face_y ) / face_h,
-                        # "nose_tip_x": (nose.x - face_x ) / face_w,
-                        # "nose_tip_y": (nose.y - face_y ) / face_h,
-                        # # "mouth_x": (mouth.x - face_x ) / face_w,
-                        # # "mouth_y": (mouth.y - face_y ) / face_h,
-                        # #"mouth_center": (left_mouth.x + left_mouth.x) / 2.0
-                        # "mouth_x": (left_mouth.x + right_mouth.x) / 2.0,
-                        # "mouth_y": (left_mouth.y + right_mouth.y) / 2.0,
-                        # "head_pitch": pitch,
-                        # "head_yaw": yaw,
-                        # "head_roll": roll,
-                        
-                        
-                        
-                        #"iod": np.linalg()
-                        # "face_x": x,
-                        # "face_y": y,
-                        # "face_w": w,
-                        # "face_h": h,
-
-                        # "left_eye_x": left_eye_x,
-                        # "left_eye_y": left_eye_y,
-
-                        # "right_eye_x": right_eye_x,
-                        # "right_eye_y": right_eye_y,
-
-                        # "nose_tip_x": nose_tip_x,
-                        # "nose_tip_y": nose_tip_y,
-
-                        # "mouth_x": mouth_x,
-                        # "mouth_y": mouth_y,
-
-                        # "face_conf": self.face_confidence,
-
-                        # "head_pitch": pitch,
-                        # "head_yaw": yaw,
-                        # "head_roll": roll,
-                    #}
-
-
-                    # features = pd.DataFrame([{
-                    #     "face_x": x,
-                    #     "face_y": y,
-                    #     "face_w": w,
-                    #     "face_h": h,
-                    #     #"face_con": self.face_confidence, #a ga rabim tho for svm classification?
-                    #     #"pose": None, #how do i get it?
-                    #     "pose_x": yaw,
-                    #     "pose_y": pitch,
-                    # }])
 
                     X = pd.DataFrame([svm_features])
 
@@ -812,9 +447,8 @@ if __name__ == "__main__":
     worker.start()
     ready_event.wait()
     csv_id = 0
-
-    #model za klasifikacijo
-    model = joblib.load("attention_svm.joblib")
+   
+    model = joblib.load("attention_svm.joblib")  #model za klasifikacijo
 
     try:
         for video in video_files:
