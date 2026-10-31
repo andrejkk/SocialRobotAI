@@ -407,6 +407,8 @@ class ProcessFrames:
 
             frameId += 1
             last_timestamp = time_s
+        cap.release()
+        cv2.destroyAllWindows()
         # finally: #a rabm to tuki??? ne če je v mainu?? TODO
         #     cap.release()
         #     cv2.destroyAllWindows()
