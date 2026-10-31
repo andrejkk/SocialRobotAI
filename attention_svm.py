@@ -20,6 +20,8 @@ from sklearn.compose import ColumnTransformer
 import matplotlib.pyplot as plt
 import joblib
 
+#from solvepnp import calculate_head_pose
+
 # def load_train_data():
 #     try:
 #         df = pd.read_csv('train/attention_detection_dataset_v1.csv',
@@ -53,101 +55,6 @@ import joblib
 
 
 
-############kaj pa ce prek tega probam?
-# def face_landmarks_to_features(face_landmarks) -> np.ndarray:
-#     """Convert MediaPipe FaceMesh landmarks to a fixed-length feature vector.
-
-#     The goal is to encode head pose and eye-gaze-related cues that an attention
-#     classifier can use. This is generic enough for a webcam or video pipeline.
-#     """
-#     if face_landmarks is None or len(face_landmarks.landmark) == 0:
-#         return np.zeros(15, dtype=np.float32)
-
-#     pts = np.array(
-#         [[lm.x, lm.y, lm.z] for lm in face_landmarks.landmark],
-#         dtype=np.float32,
-#     )
-
-#     def p(idx):
-#         return pts[idx]
-
-#     # --- face geometry ---
-#     face_center = pts[[0, 1, 33, 61, 291, 199]].mean(axis=0)
-#     nose = p(1)
-#     chin = p(152)
-#     left_eye_corner = p(33)
-#     right_eye_corner = p(263)
-#     left_ear = p(234)
-#     right_ear = p(454)
-
-#     face_width = np.linalg.norm(right_ear - left_ear)
-#     face_height = np.linalg.norm(chin - nose)
-#     eye_distance = np.linalg.norm(right_eye_corner - left_eye_corner)
-
-#     # --- head pose approximations from geometry ---
-#     # Yaw: horizontal offset between eye corners
-#     yaw = (right_eye_corner[0] - left_eye_corner[0]) / (eye_distance + 1e-8)
-#     # Pitch: vertical difference between nose and chin
-#     pitch = (nose[1] - chin[1]) / (face_height + 1e-8)
-#     # Roll: relative orientation from ear-to-ear line vs vertical axis
-#     ear_line = right_ear - left_ear
-#     roll = np.arctan2(ear_line[1], ear_line[0])  # rough 2D head roll estimate
-
-#     # --- eye features ---
-#     left_eye_idx = [33, 133, 159, 145, 153, 263]
-#     right_eye_idx = [362, 382, 381, 380, 374, 386]
-
-#     left_eye = pts[left_eye_idx]
-#     right_eye = pts[right_eye_idx]
-#     left_eye_center = left_eye.mean(axis=0)
-#     right_eye_center = right_eye.mean(axis=0)
-
-#     def eye_aspect_ratio(eye_points):
-#         top = eye_points[1]
-#         bottom = eye_points[4]
-#         left = eye_points[0]
-#         right = eye_points[3]
-#         vertical = np.linalg.norm(top - bottom)
-#         horizontal = np.linalg.norm(left - right)
-#         return vertical / (horizontal + 1e-8)
-
-#     left_ear_ratio = eye_aspect_ratio(left_eye)
-#     right_ear_ratio = eye_aspect_ratio(right_eye)
-
-#     # Eye gaze estimate: relative offset between left and right eye centers
-#     gaze_x = right_eye_center[0] - left_eye_center[0]
-#     gaze_y = right_eye_center[1] - left_eye_center[1]
-#     gaze_z = right_eye_center[2] - left_eye_center[2]
-
-#     # Additional spatial cues to help attention detection
-#     head_center_offset = face_center[0] - 0.5
-#     head_vertical = face_center[1] - 0.5
-
-#     feature_vector = np.array(
-#         [
-#             yaw,
-#             pitch,
-#             roll,
-#             gaze_x,
-#             gaze_y,
-#             gaze_z,
-#             left_ear_ratio,
-#             right_ear_ratio,
-#             face_width,
-#             face_height,
-#             eye_distance,
-#             head_center_offset,
-#             head_vertical,
-#             left_eye_center[0] - 0.5,
-#             right_eye_center[0] - 0.5,
-#         ],
-#         dtype=np.float32,
-#     )
-
-#     return feature_vector
-
-
-
 def load_data():
     try:
         df = pd.read_csv('trainv3/attention_detection_dataset_v3.csv',
@@ -173,6 +80,15 @@ def load_data():
     return df
 
 df = load_data()
+# print(df[
+#     [
+#         "face_x", "face_y", "face_w", "face_h",
+#         "left_eye_x", "left_eye_y",
+#         "right_eye_x", "right_eye_y",
+#         "nose_tip_x", "nose_tip_y",
+#         "mouth_x", "mouth_y"
+#     ]
+# ].describe())
 
 #tole uporabi ce bos dubu tud pupil coords pri mediapipe
 #izracunaj NORMALIZED TO FACE(W,H) PUPIL COORDS for gaze estimation
@@ -233,9 +149,9 @@ df = df[df['face_present'] == 1].copy()
 # eye_center_x = (df["right_eye_x"] + df["left_eye_x"]) / 2.0
 # eye_center_y = (df["right_eye_y"] + df["left_eye_y"]) / 2.0
 # eye_center = np.array(eye_center_x, eye_center_y)
-# #-----OCESA------
 
-# #-----USTA-------
+
+# # USTA
 # #iz le (x,y) ene tocke ust nemorem dobit sredisca, dobimo norm_mouth(x,y)
 # mouth_x_norm = (df["mouth_x"] - df["face_x"]) / df["face_w"] #x -> po sirini
 # mouth_y_norm = (df["mouth_y"] - df["face_y"]) / df["face_h"] #y -> po visini
@@ -244,13 +160,13 @@ df = df[df['face_present'] == 1].copy()
 # #nimam framea v csv tkoda to pomoje negre?
 # # df["mouth_x"] = df["mouth_x"] / df["frame_width"]
 # # df["mouth_y"] = df["mouth_y"] / df["frame_height"]
-# #-----USTA-------
+# 
 
-# #-----NOS--------
+# # NOS
 # #NOS da dobim norm_nose_tip(x,y) isto naredim kot za usta
 # nose_tip_x_norm = (df["nose_tip_x"] - df["face_x"]) / df["face_w"]
 # nose_tip_y_norm = (df["nose_tip_y"] - df["face_y"]) / df["face_h"]
-# #-----NOS--------
+#
 #######################BAJE NAJ RAJE NORMALIZIRAM Z IOD KOKR PA FACE W PA H
 
 
@@ -292,14 +208,13 @@ df = df[df['face_present'] == 1].copy()
 # )
 
 
-#kar je isto kot: calculate IOD interocular distance
+#kar je isto kot:IOD distanca
 # df["IOD"] = np.sqrt(
 #     (df["left_eye_x"] - df["right_eye_x"]) ** 2 + 
 #     (df["left_eye_y"] - df["right_eye_y"])** 2
 # )
 #df["IOD"] = interocular_eye_dist
 #df["interocular_eye_dist"] = interocular_eye_dist
-
 
 
 #iz cesar lah dobim normalizirane koordinate za sredisce med levim in desnim okom, pa tudi za sredisce med usti
@@ -316,38 +231,25 @@ df = df[df['face_present'] == 1].copy()
 #relativna razdalja od uci do ust
 
 #nimam pupilov v pose landmarku, zato ne morem izracunat IPD, ampak lahko izracunam IOD (interocular distance) med levim in desnim okom
-# #calculate IPD interpupillary distance
+# IPD
 # df["IPD"] = np.sqrt(
 #     (df["pupil_left_x"] - df["pupil_right_x"]) **
 #     2 + (df["pupil_left_y"] - df["pupil_right_y"]) ** 2
 # )
 
-#kako pol to uporabim iz dobljenih koordinat?
-# eps = 1e-6
-# df["IPD_ratio"] = df["IPD"] / (df["IOD"] + eps)
 
-# eye_distance = np.maximum(eye_distance, eps)
-
-eye_mid_x = (df['left_eye_x'] + df['right_eye_x']) / 2
-eye_mid_y = (df['left_eye_y'] + df['right_eye_y']) / 2
-iod = np.sqrt((df['right_eye_x'] - df['left_eye_x'])**2 + (df['right_eye_y'] - df['left_eye_y'])**2)
-
-# df['left_eye_x_norm']  = (df['left_eye_x']  - eye_mid_x) / iod
-# df['left_eye_y_norm']  = (df['left_eye_y']  - eye_mid_y) / iod
-# df['right_eye_x_norm'] = (df['right_eye_x'] - eye_mid_x) / iod
-# df['right_eye_y_norm'] = (df['right_eye_y'] - eye_mid_y) / iod
-# df['nose_tip_x_norm']  = (df['nose_tip_x']  - eye_mid_x) / iod
-# df['nose_tip_y_norm']  = (df['nose_tip_y']  - eye_mid_y) / iod
-# df['mouth_x_norm']     = (df['mouth_x']     - eye_mid_x) / iod
-# df['mouth_y_norm']     = (df['mouth_y']     - eye_mid_y) / iod
-
-# pure distances - no subtraction needed, per the earlier rule (it cancels out algebraically)
-#TODO a te rabim od clauda?? probably dobro da mam??
+#TODO probably dobro da mam??
 # df['nose_mouth_dist']      = np.sqrt((df['mouth_x']-df['nose_tip_x'])**2 + (df['mouth_y']-df['nose_tip_y'])**2) / iod
 # df['left_eye_mouth_dist']  = np.sqrt((df['mouth_x']-df['left_eye_x'])**2 + (df['mouth_y']-df['left_eye_y'])**2) / iod
 # df['right_eye_mouth_dist'] = np.sqrt((df['mouth_x']-df['right_eye_x'])**2 + (df['mouth_y']-df['right_eye_y'])**2) / iod
 
-    
+iod = np.sqrt((df['right_eye_x'] - df['left_eye_x'])**2 + (df['right_eye_y'] - df['left_eye_y'])**2)
+eye_mid_x = (df['left_eye_x'] + df['right_eye_x']) / 2
+eye_mid_y = (df['left_eye_y'] + df['right_eye_y']) / 2
+
+eye_nose_offset_x = (df["nose_tip_x"] - eye_mid_x) / iod
+eye_nose_offset_y = (df["nose_tip_y"] - eye_mid_y) / iod
+
 left_eye_x_norm = (df['left_eye_x'] - eye_mid_x) / iod
 left_eye_y_norm = (df['left_eye_y'] - eye_mid_y) / iod
 right_eye_x_norm = (df['right_eye_x'] - eye_mid_x) / iod
@@ -357,7 +259,35 @@ nose_tip_y_norm = (df['nose_tip_y'] - eye_mid_y) / iod
 mouth_x_norm = (df['mouth_x'] - eye_mid_x) / iod
 mouth_y_norm = (df['mouth_y'] - eye_mid_y) / iod
 
+# racunanje premikov glave iz oci in nosa
+roll_proxy = np.arctan2(df['right_eye_y'] - df['left_eye_y'], df['right_eye_x'] - df['left_eye_x'])
+yaw_proxy = np.arctan2(nose_tip_x_norm, 1.0)
+pitch_proxy = np.arctan2(nose_tip_y_norm, 1.0)
 
+# yaw_proxy = np.arctan2(
+#     df["nose_tip_x"] - eye_mid_x,
+#     iod
+# )
+# pitch_proxy = np.arctan2(
+#     eye_mid_y - df["nose_tip_y"],
+#     iod
+# )
+
+# yaw_proxy = (df['nose_tip_x'] - eye_mid_x) / iod 
+# pitch_proxy = (df['nose_tip_y'] - eye_mid_y) / iod
+
+# pitch = np.arctan2(chin[1] - nose_tip[1], chin[2] - nose_tip[2])
+# yaw = np.arctan2(nose_tip[0] - chin[0], nose_tip[2] - chin[2])
+
+# gaze_x = right_eye_center[0] - left_eye_center[0]
+# gaze_y = right_eye_center[1] - left_eye_center[1]
+# gaze_z = right_eye_center[2] - left_eye_center[2]
+
+gaze_x = eye_mid_x - eye_mid_x
+gaze_y = eye_mid_y - eye_mid_y
+#gaze_z = right_eye_center[2] - left_eye_center[2] ? 
+
+#TEGA UPORABLAM
 new_df = pd.DataFrame({
     "left_eye_x": left_eye_x_norm,
     "left_eye_y": left_eye_y_norm,
@@ -370,6 +300,9 @@ new_df = pd.DataFrame({
     "mouth_x": mouth_x_norm,
     "mouth_y": mouth_y_norm,
     #"mouth_center": mouth_center,
+    "head_pitch": pitch_proxy,
+    "head_yaw": yaw_proxy,
+    "head_roll": roll_proxy,
     # "head_pitch": df["head_pitch"],
     # "head_yaw": df["head_yaw"],
     # "head_roll": df["head_roll"],
@@ -380,49 +313,6 @@ X = new_df.drop(columns="label")
 y = new_df["label"]
 
 
-#####brez IOD:
-# new_df = pd.DataFrame({
-#     "left_eye_x": left_eye_x_norm,
-#     "left_eye_y": left_eye_y_norm,
-#     "right_eye_x": right_eye_x_norm,
-#     "right_eye_y": right_eye_y_norm,
-    
-#     "nose_tip_x": nose_tip_x_norm,
-#     "nose_tip_y": nose_tip_y_norm,
-
-#     "mouth_x": mouth_x_norm,
-#     "mouth_y": mouth_y_norm,
-#     #"mouth_center": mouth_center,
-#     "head_pitch": df["head_pitch"],
-#     "head_yaw": df["head_yaw"],
-#     "head_roll": df["head_roll"],
-#     "label": df["label"]
-# }, index=df.index)
-
-#print(new_df)
-#print(new_df_iod)
-
-#train_df, test_df = train_test_split(new_df_iod, test_size=0.2, random_state=42, stratify=df['label'])
-
-#binarni target column za attentiveness je label
-target_column = 'label'
-
-######za brez 10fold#######
-# X_train = train_df.drop(columns=[target_column])
-# y_train = train_df[target_column]
-
-# print("\nSVM features:")
-# for i, column in enumerate(X_train.columns):
-#     print(i, column)
-######za brez 10fold#######
-
-
-# X_test = test_df.drop(columns=[target_column])
-# y_test = test_df[target_column]
-
-# print("\nTraining samples:", len(X_train))
-# print("Test samples:", len(X_test))
-# print("Number of features:", X_train.shape[1])
 
 X_dev, X_test, y_dev, y_test = train_test_split(
     X,
@@ -435,24 +325,6 @@ X_dev, X_test, y_dev, y_test = train_test_split(
 
 #binarni target column za attentiveness je label
 target_column = 'label'
-
-
-# numeric_features = [
-#     'face_x',
-#     'face_y',
-#     'face_w',
-#     'face_h',
-#     #'face_con',
-#     'pose_x',
-#     'pose_y'
-# ]
-#categorical_features = ['pose']
-# preprocessor = ColumnTransformer(
-#     transformers=[
-#         ('num', StandardScaler(), numeric_features),
-#         ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
-#     ]
-# )
 
 model = make_pipeline(
     #preprocessor,
@@ -485,7 +357,7 @@ scores = cross_validate(
         "recall",
         "f1"
     ],
-    return_train_score=True #al true?
+    return_train_score=True
 )
 
 print(y_dev.value_counts())
@@ -503,13 +375,8 @@ print("Std F1:", scores["test_f1"].std())
 print("###10FOLD")
 
 
-# --------------------------------------------------
-# TRAIN
-# --------------------------------------------------
-
 print("Training SVM...")
 
-#model.fit(X_train, y_train)
 model.fit(X_dev, y_dev)
 
 print("Training finished, saving model...")
@@ -517,14 +384,8 @@ print("Training finished, saving model...")
 joblib.dump(model, "attention_svm.joblib")
 
 
-
-# --------------------------------------------------
-# TEST
-# --------------------------------------------------
 y_pred = model.predict(X_test)
-# --------------------------------------------------
-# RESULTS
-# --------------------------------------------------
+
 
 accuracy = accuracy_score(y_test, y_pred)
 
@@ -539,9 +400,7 @@ print(classification_report(y_test, y_pred))
 
 print("\nConfusion matrix:")
 print(confusion_matrix(y_test, y_pred))
-# --------------------------------------------------
-# CONFUSION MATRIX PLOT
-# --------------------------------------------------
+
 
 ConfusionMatrixDisplay.from_predictions(
     y_test,
