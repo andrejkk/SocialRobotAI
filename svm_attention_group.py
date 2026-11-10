@@ -282,7 +282,8 @@ grid = GridSearchCV(
 
 grid.fit(X_dev, y_dev)
 best = grid.best_params_
-#print("\nbest on dev:", best, "| dev CV balanced accuracy: %.3f" % grid.best_score_)
+print("rezultati finetuninga: ")
+#print("\nbest on:", best, "| dev CV balanced accuracy: %.3f" % grid.best_score_)
 print("\nbest on dev:", best)
 print("Best parameters:", grid.best_params_)
 print("Best balanced accuracy:", grid.best_score_)
@@ -304,9 +305,9 @@ for metric in scoring:
 
     print(f"{metric}: {mean:.4f} (+/- {std:.4f})")
 
-# ==========================================
-# FINAL SVM TEST
-# ==========================================
+
+print("RUNNING FINAL SVM TEST!!")
+
 
 y_pred = model.predict(X_test)
 
@@ -429,7 +430,6 @@ for metric in scoring:
     print(f"{metric}: {mean:.4f} (+/- {std:.4f})")
 
 
-#print("=============MAJORITY VOTE==========")
 
 # majorityvote.fit(X_dev, y_dev)
 # y_pred_base = majorityvote.predict(X_test)
