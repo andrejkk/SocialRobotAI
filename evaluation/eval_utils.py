@@ -352,11 +352,11 @@ def print_timing_differences(diffs):
           f"min(abs): {np.min(np.abs(start_diffs)):.4f}s  max(abs): {np.max(np.abs(start_diffs)):.4f}s")
     print(f"  End-time   differences  — mean: {np.mean(end_diffs):+.4f}s  "
           f"std: {np.std(end_diffs):.4f}s  "
-          f"min(abs): {np.min(np.abs(end_diffs)):.4f}s  max(abs): {np.max(np.abs(end_diffs)):.4f}s")
+        #   f"min(abs): {np.min(np.abs(end_diffs)):.4f}s  max(abs): {np.max(np.abs(end_diffs)):.4f}s")
 
 
-def plot_timing_histograms(diffs, output_path='timing_diff_histogram.png'):
-    """Plot histograms of start-time and end-time differences and save to PNG."""
+def plot_timing_histograms(diffs, output_path='timing_diff_histogram.svg'):
+    """Plot histograms of start-time and end-time differences and save to SVG."""
     if not diffs:
         print("No matched pairs — skipping timing-difference histogram.")
         return
@@ -370,12 +370,12 @@ def plot_timing_histograms(diffs, output_path='timing_diff_histogram.png'):
     s_mean, s_std = np.mean(start_diffs), np.std(start_diffs)
     axes[0].hist(start_diffs, bins='auto', edgecolor='black', alpha=0.7)
     axes[0].axvline(s_mean, color='red', linestyle='--',
-                    label=f'mean={s_mean:+.3f}s')
+                    label=f'povprečje={s_mean:+.3f}s')
     axes[0].axvspan(s_mean - s_std, s_mean + s_std, alpha=0.2, color='orange',
-                    label=f'±std={s_std:.3f}s')
-    axes[0].set_title('Start-Time Differences (pred − GT)')
-    axes[0].set_xlabel('Difference (s)')
-    axes[0].set_ylabel('Count')
+                    label=f'± standardni odklon={s_std:.3f}s')
+    axes[0].set_title('Razlike začetnega časa (napoved − GT)')
+    axes[0].set_xlabel('Razlika (s)')
+    axes[0].set_ylabel('Število')
     axes[0].legend(fontsize=9)
     axes[0].grid(True, alpha=0.3)
 
@@ -383,12 +383,12 @@ def plot_timing_histograms(diffs, output_path='timing_diff_histogram.png'):
     e_mean, e_std = np.mean(end_diffs), np.std(end_diffs)
     axes[1].hist(end_diffs, bins='auto', edgecolor='black', alpha=0.7)
     axes[1].axvline(e_mean, color='red', linestyle='--',
-                    label=f'mean={e_mean:+.3f}s')
+                    label=f'povprečje={e_mean:+.3f}s')
     axes[1].axvspan(e_mean - e_std, e_mean + e_std, alpha=0.2, color='orange',
-                    label=f'±std={e_std:.3f}s')
-    axes[1].set_title('End-Time Differences (pred − GT)')
-    axes[1].set_xlabel('Difference (s)')
-    axes[1].set_ylabel('Count')
+                    label=f'± standardni odklon={e_std:.3f}s')
+    axes[1].set_title('Razlike končnega časa (napoved − GT)')
+    axes[1].set_xlabel('Razlika (s)')
+    axes[1].set_ylabel('Število')
     axes[1].legend(fontsize=9)
     axes[1].grid(True, alpha=0.3)
 

@@ -503,7 +503,7 @@ if __name__ == "__main__":
 
     # Build histogram output path next to the main plot
     hist_output = args.output.rsplit('.', 1)
-    hist_output_path = hist_output[0] + '_timing_diff_histogram.png' if len(hist_output) > 1 else args.output + '_timing_diff_histogram.png'
+    hist_output_path = hist_output[0] + '_timing_diff_histogram.svg' if len(hist_output) > 1 else args.output + '_timing_diff_histogram.svg'
     plot_timing_histograms(diffs, output_path=hist_output_path)
 
     # ---- Build evaluation report (same format as k-fold-cross-evaluation) ----
